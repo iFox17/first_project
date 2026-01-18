@@ -121,31 +121,44 @@
 
         .genre-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        @media (min-width: 640px) {
+            .genre-grid {
+                grid-template-columns: repeat(4, 1fr);
+            }
         }
 
         .genre-btn {
-            background: rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.15);
             border: 2px solid transparent;
             color: #fff;
-            padding: 15px;
-            border-radius: 12px;
+            padding: 20px 12px;
+            min-height: 80px;
+            border-radius: 16px;
             cursor: pointer;
             transition: all 0.3s;
             font-size: 14px;
+            font-weight: 500;
             text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .genre-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-2px);
         }
 
         .genre-btn.selected {
-            background: rgba(255, 255, 255, 0.9);
+            background: rgba(255, 255, 255, 0.95);
             color: #667eea;
             border-color: #fff;
             font-weight: bold;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
 
         .btn {
@@ -295,7 +308,7 @@
 
         .movie-poster {
             width: 100%;
-            height: 65%;
+            height: 70%;
             object-fit: cover;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             display: flex;
@@ -313,46 +326,50 @@
 
         .movie-rating {
             position: absolute;
-            top: 10px;
-            right: 10px;
-            background: rgba(0, 0, 0, 0.8);
+            bottom: 12px;
+            right: 12px;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
             color: #ffd700;
-            padding: 5px 10px;
-            border-radius: 8px;
-            font-size: 16px;
+            padding: 8px 14px;
+            border-radius: 10px;
+            font-size: 18px;
             font-weight: bold;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
         }
 
         .language-badges {
             position: absolute;
-            top: 10px;
-            left: 10px;
+            bottom: 12px;
+            left: 12px;
             display: flex;
-            gap: 5px;
+            gap: 6px;
         }
 
         .language-badge {
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(6px);
             color: #fff;
-            padding: 5px 10px;
+            padding: 6px 12px;
             border-radius: 8px;
-            font-size: 12px;
+            font-size: 11px;
             font-weight: bold;
             text-transform: uppercase;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
         }
 
         .language-badge.rus {
-            background: rgba(0, 123, 255, 0.9);
+            background: rgba(33, 150, 243, 0.9);
         }
 
         .language-badge.eng {
-            background: rgba(220, 53, 69, 0.9);
+            background: rgba(244, 67, 54, 0.9);
         }
 
         .movie-info {
-            padding: 15px;
+            padding: 16px;
             color: #333;
-            height: 35%;
+            height: 30%;
             overflow-y: auto;
         }
 
@@ -586,9 +603,72 @@
             border-radius: 15px;
             margin-bottom: 20px;
         }
+
+        /* Toast Notifications */
+        #toastContainer {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            pointer-events: none;
+        }
+
+        .toast {
+            background: rgba(33, 33, 33, 0.95);
+            backdrop-filter: blur(10px);
+            color: #fff;
+            padding: 16px 24px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 280px;
+            max-width: 400px;
+            animation: toastSlideUp 0.3s ease-out;
+            pointer-events: auto;
+        }
+
+        .toast.success {
+            background: rgba(46, 213, 115, 0.95);
+        }
+
+        .toast.error {
+            background: rgba(255, 71, 87, 0.95);
+        }
+
+        .toast.info {
+            background: rgba(33, 150, 243, 0.95);
+        }
+
+        @keyframes toastSlideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .toast-icon {
+            font-size: 20px;
+        }
+
+        .toast-message {
+            flex: 1;
+            font-size: 14px;
+            font-weight: 500;
+        }
     </style>
 </head>
 <body>
+    <div id="toastContainer"></div>
     <div class="container">
         <div class="header">
             <div class="logo">🎬</div>
@@ -730,30 +810,113 @@
         // Initialize Firebase
         let database = null;
         let useFirebase = false;
+        let firebaseInitPromise = null;
 
-        // Check if Firebase should be initialized
+        // Promise-based Firebase initialization
         if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
-            // Load Firebase SDK dynamically only if configured
-            const script1 = document.createElement('script');
-            script1.src = 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js';
-            script1.onload = () => {
-                const script2 = document.createElement('script');
-                script2.src = 'https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js';
-                script2.onload = () => {
-                    try {
-                        firebase.initializeApp(firebaseConfig);
-                        database = firebase.database();
-                        useFirebase = true;
-                        console.log('Firebase подключен');
-                    } catch (error) {
-                        console.log('Ошибка инициализации Firebase:', error);
-                    }
+            firebaseInitPromise = new Promise((resolve, reject) => {
+                const timeoutId = setTimeout(() => {
+                    reject(new Error('Firebase initialization timeout'));
+                }, 15000); // 15 second timeout
+
+                const script1 = document.createElement('script');
+                script1.src = 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js';
+                script1.onerror = () => {
+                    clearTimeout(timeoutId);
+                    reject(new Error('Failed to load Firebase App SDK'));
                 };
-                document.head.appendChild(script2);
-            };
-            document.head.appendChild(script1);
+                script1.onload = () => {
+                    const script2 = document.createElement('script');
+                    script2.src = 'https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js';
+                    script2.onerror = () => {
+                        clearTimeout(timeoutId);
+                        reject(new Error('Failed to load Firebase Database SDK'));
+                    };
+                    script2.onload = () => {
+                        try {
+                            firebase.initializeApp(firebaseConfig);
+                            database = firebase.database();
+                            useFirebase = true;
+                            clearTimeout(timeoutId);
+                            console.log('Firebase подключен');
+                            resolve(database);
+                        } catch (error) {
+                            clearTimeout(timeoutId);
+                            console.error('Ошибка инициализации Firebase:', error);
+                            reject(error);
+                        }
+                    };
+                    document.head.appendChild(script2);
+                };
+                document.head.appendChild(script1);
+            });
         } else {
             console.log('Firebase не настроен. Работает в демо-режиме (только для одного пользователя).');
+            firebaseInitPromise = Promise.reject(new Error('Firebase not configured'));
+        }
+
+        // Helper to wait for Firebase
+        async function waitForFirebase(timeout = 15000) {
+            if (!firebaseInitPromise) {
+                throw new Error('Firebase not configured');
+            }
+            try {
+                await firebaseInitPromise;
+                return database;
+            } catch (error) {
+                throw error;
+            }
+        }
+
+        // Escape HTML to prevent XSS
+        function escapeHtml(unsafe) {
+            if (typeof unsafe !== 'string') {
+                return unsafe;
+            }
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // Validate Firebase session data
+        function validateSessionData(sessionData) {
+            if (!sessionData || typeof sessionData !== 'object') {
+                throw new Error('Неверный формат данных сессии');
+            }
+
+            // Validate genres
+            if (!Array.isArray(sessionData.genres) || sessionData.genres.length === 0) {
+                throw new Error('Отсутствуют или неверные жанры');
+            }
+
+            // Validate all genre IDs are numbers
+            if (!sessionData.genres.every(id => typeof id === 'number')) {
+                throw new Error('Неверный формат ID жанров');
+            }
+
+            // Validate countries (optional)
+            if (sessionData.countries !== undefined && !Array.isArray(sessionData.countries)) {
+                throw new Error('Неверный формат стран');
+            }
+
+            // Validate movieCount
+            if (typeof sessionData.movieCount !== 'number' ||
+                sessionData.movieCount < 10 ||
+                sessionData.movieCount > 100) {
+                throw new Error('Неверное количество фильмов (должно быть 10-100)');
+            }
+
+            // Validate minYear
+            if (typeof sessionData.minYear !== 'number' ||
+                sessionData.minYear < 1970 ||
+                sessionData.minYear > 2025) {
+                throw new Error('Неверный год (должен быть 1970-2025)');
+            }
+
+            return true;
         }
 
         // Available genres
@@ -793,6 +956,72 @@
         let currentMovieIndex = 0;
         let userChoices = {};
         let partnerChoices = {};
+
+        // Cleanup references
+        let activeEventListeners = [];
+        let activeFirebaseListeners = [];
+        let currentCardCleanup = null;
+
+        // Helper functions for Firebase listener management
+        function addFirebaseListener(ref, eventType, callback) {
+            if (database) {
+                ref.on(eventType, callback);
+                activeFirebaseListeners.push({ ref, eventType, callback });
+            }
+        }
+
+        function cleanupFirebaseListeners() {
+            activeFirebaseListeners.forEach(({ ref, eventType, callback }) => {
+                ref.off(eventType, callback);
+            });
+            activeFirebaseListeners = [];
+        }
+
+        function cleanupAllListeners() {
+            if (currentCardCleanup) {
+                currentCardCleanup();
+                currentCardCleanup = null;
+            }
+            cleanupFirebaseListeners();
+        }
+
+        // Helper function for fetch with retry and error handling
+        async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(url, options);
+
+                    if (!response.ok) {
+                        if (response.status === 429) {
+                            // Rate limiting - wait longer
+                            console.warn(`Rate limited (429). Retry ${i + 1}/${retries}`);
+                            await new Promise(resolve => setTimeout(resolve, delay * (i + 2)));
+                            continue;
+                        } else if (response.status >= 500) {
+                            // Server error - retry
+                            console.warn(`Server error (${response.status}). Retry ${i + 1}/${retries}`);
+                            await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
+                            continue;
+                        } else if (response.status === 401) {
+                            // Unauthorized - API key issue
+                            throw new Error('Неверный API ключ TMDB');
+                        } else {
+                            // Other HTTP error
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+                    }
+
+                    return response;
+                } catch (error) {
+                    if (i === retries - 1) {
+                        // Last attempt failed
+                        throw error;
+                    }
+                    console.warn(`Fetch error: ${error.message}. Retry ${i + 1}/${retries}`);
+                    await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
+                }
+            }
+        }
 
         // Initialize UI
         function initializeUI() {
@@ -895,12 +1124,23 @@
                 }
 
                 // Listen for partner joining
-                database.ref(`sessions/${sessionId}/partner`).on('value', (snapshot) => {
+                const partnerJoinCallback = (snapshot) => {
                     if (snapshot.val() === true) {
                         console.log('Partner joined, starting swipe phase');
+                        // Cleanup this specific listener since partner joined
+                        const ref = database.ref(`sessions/${sessionId}/partner`);
+                        ref.off('value', partnerJoinCallback);
+                        activeFirebaseListeners = activeFirebaseListeners.filter(
+                            listener => listener.callback !== partnerJoinCallback
+                        );
                         startSwipePhase();
                     }
-                });
+                };
+                addFirebaseListener(
+                    database.ref(`sessions/${sessionId}/partner`),
+                    'value',
+                    partnerJoinCallback
+                );
             } else {
                 // Demo mode - show loading
                 showScreen('linkScreen');
@@ -959,6 +1199,16 @@
                     const sessionData = snapshot.val();
                     console.log('Session data:', sessionData);
 
+                    // Validate session data
+                    try {
+                        validateSessionData(sessionData);
+                    } catch (validationError) {
+                        console.error('Session validation failed:', validationError);
+                        alert('Некорректные данные сессии: ' + validationError.message);
+                        window.location.href = window.location.pathname;
+                        return;
+                    }
+
                     selectedGenres = sessionData.genres;
                     selectedCountries = sessionData.countries || [];
                     movieCount = sessionData.movieCount;
@@ -970,9 +1220,13 @@
                     console.log('Marked as partner joined');
 
                     // Listen for host choices
-                    database.ref(`sessions/${sessionId}/hostChoices`).on('value', (snapshot) => {
-                        partnerChoices = snapshot.val() || {};
-                    });
+                    addFirebaseListener(
+                        database.ref(`sessions/${sessionId}/hostChoices`),
+                        'value',
+                        (snapshot) => {
+                            partnerChoices = snapshot.val() || {};
+                        }
+                    );
 
                     await fetchMovies();
                     startSwipePhase();
@@ -1019,7 +1273,7 @@
                             url += `&with_origin_country=${countryParam}`;
                         }
 
-                        const response = await fetch(url);
+                        const response = await fetchWithRetry(url);
                         const data = await response.json();
 
                         // Filter movies with rating >= 5 and year >= minYear
@@ -1036,7 +1290,7 @@
                     const moviePromises = allMovies.slice(0, movieCount * 1.5).map(async (movie) => {
                         try {
                             // Fetch movie details with translations
-                            const detailsResponse = await fetch(
+                            const detailsResponse = await fetchWithRetry(
                                 `${TMDB_BASE_URL}/movie/${movie.id}?api_key=${TMDB_API_KEY}&language=ru-RU&append_to_response=credits,translations`
                             );
                             const details = await detailsResponse.json();
@@ -1113,12 +1367,16 @@
             // Listen for partner completion if in Firebase mode
             if (database && sessionId) {
                 const partnerChoicesKey = isHost ? 'partnerChoices' : 'hostChoices';
-                database.ref(`sessions/${sessionId}/${partnerChoicesKey}`).on('value', (snapshot) => {
-                    const choices = snapshot.val() || {};
-                    if (Object.keys(choices).length >= movies.length && currentMovieIndex < movies.length) {
-                        document.getElementById('partnerStatus').classList.add('show');
+                addFirebaseListener(
+                    database.ref(`sessions/${sessionId}/${partnerChoicesKey}`),
+                    'value',
+                    (snapshot) => {
+                        const choices = snapshot.val() || {};
+                        if (Object.keys(choices).length >= movies.length && currentMovieIndex < movies.length) {
+                            document.getElementById('partnerStatus').classList.add('show');
+                        }
                     }
-                });
+                );
             }
 
             renderCurrentCard();
@@ -1147,30 +1405,30 @@
 
             const posterContent = movie.poster.startsWith('http')
                 ? `<div class="movie-poster">
-                    <img src="${movie.poster}" alt="${movie.title}">
+                    <img src="${escapeHtml(movie.poster)}" alt="${escapeHtml(movie.title)}">
                     ${languageBadges}
-                    ${movie.rating !== 'N/A' ? `<div class="movie-rating">⭐ ${movie.rating}</div>` : ''}
+                    ${movie.rating !== 'N/A' ? `<div class="movie-rating">⭐ ${escapeHtml(movie.rating)}</div>` : ''}
                    </div>`
                 : `<div class="movie-poster">${movie.poster}</div>`;
 
             const genresHtml = movie.movieGenres && movie.movieGenres.length > 0
-                ? `<div class="movie-genres">${movie.movieGenres.slice(0, 3).map(g => `<span class="movie-genre">${g}</span>`).join('')}</div>`
+                ? `<div class="movie-genres">${movie.movieGenres.slice(0, 3).map(g => `<span class="movie-genre">${escapeHtml(g)}</span>`).join('')}</div>`
                 : '';
 
             const metaHtml = `
                 <div class="movie-meta">
-                    ${movie.year !== 'N/A' ? `<span>📅 ${movie.year}</span>` : ''}
-                    ${movie.director !== 'Неизвестен' ? `<span>🎬 ${movie.director}</span>` : ''}
+                    ${movie.year !== 'N/A' ? `<span>📅 ${escapeHtml(movie.year)}</span>` : ''}
+                    ${movie.director !== 'Неизвестен' ? `<span>🎬 ${escapeHtml(movie.director)}</span>` : ''}
                 </div>
             `;
 
             card.innerHTML = `
                 ${posterContent}
                 <div class="movie-info">
-                    <div class="movie-title">${movie.title}</div>
+                    <div class="movie-title">${escapeHtml(movie.title)}</div>
                     ${metaHtml}
                     ${genresHtml}
-                    <div class="movie-description">${movie.overview}</div>
+                    <div class="movie-description">${escapeHtml(movie.overview)}</div>
                 </div>
             `;
 
@@ -1181,15 +1439,17 @@
         }
 
         function setupSwipeHandlers(card) {
+            // Cleanup previous card's listeners
+            if (currentCardCleanup) {
+                currentCardCleanup();
+            }
+
             let startX = 0;
             let currentX = 0;
             let isDragging = false;
 
             const dislikeIndicator = document.getElementById('dislikeIndicator');
             const likeIndicator = document.getElementById('likeIndicator');
-
-            card.addEventListener('mousedown', startDrag);
-            card.addEventListener('touchstart', startDrag);
 
             function startDrag(e) {
                 isDragging = true;
@@ -1230,10 +1490,25 @@
                 }
             }
 
+            // Attach listeners to card
+            card.addEventListener('mousedown', startDrag);
+            card.addEventListener('touchstart', startDrag);
+
+            // Attach listeners to document
             document.addEventListener('mousemove', drag);
             document.addEventListener('touchmove', drag);
             document.addEventListener('mouseup', endDrag);
             document.addEventListener('touchend', endDrag);
+
+            // Store cleanup function
+            currentCardCleanup = function() {
+                card.removeEventListener('mousedown', startDrag);
+                card.removeEventListener('touchstart', startDrag);
+                document.removeEventListener('mousemove', drag);
+                document.removeEventListener('touchmove', drag);
+                document.removeEventListener('mouseup', endDrag);
+                document.removeEventListener('touchend', endDrag);
+            };
         }
 
         function swipe(choice) {
@@ -1279,12 +1554,34 @@
                 const partnerChoicesKey = isHost ? 'partnerChoices' : 'hostChoices';
                 const partnerRef = database.ref(`sessions/${sessionId}/${partnerChoicesKey}`);
 
-                partnerRef.on('value', (snapshot) => {
+                let matchesShown = false; // Prevent multiple calls
+                const checkPartnerCallback = (snapshot) => {
                     partnerChoices = snapshot.val() || {};
-                    if (Object.keys(partnerChoices).length >= movies.length) {
+                    if (Object.keys(partnerChoices).length >= movies.length && !matchesShown) {
+                        matchesShown = true;
+                        // Remove this listener
+                        partnerRef.off('value', checkPartnerCallback);
+                        activeFirebaseListeners = activeFirebaseListeners.filter(
+                            listener => listener.callback !== checkPartnerCallback
+                        );
                         showMatches();
                     }
-                });
+                };
+
+                addFirebaseListener(partnerRef, 'value', checkPartnerCallback);
+
+                // Add timeout after 5 minutes
+                setTimeout(() => {
+                    if (!matchesShown) {
+                        matchesShown = true;
+                        partnerRef.off('value', checkPartnerCallback);
+                        activeFirebaseListeners = activeFirebaseListeners.filter(
+                            listener => listener.callback !== checkPartnerCallback
+                        );
+                        alert('Время ожидания партнера истекло. Попробуйте создать новую сессию.');
+                        startOver();
+                    }
+                }, 5 * 60 * 1000); // 5 minutes
             } else {
                 // Demo mode - simulate partner choices (randomly like 40-60% of movies)
                 movies.forEach(movie => {
@@ -1314,15 +1611,15 @@
             const matchesGrid = document.getElementById('matchesGrid');
             matchesGrid.innerHTML = matches.map(movie => {
                 const posterContent = movie.poster.startsWith('http')
-                    ? `<img src="${movie.poster}" class="match-poster" alt="${movie.title}">`
+                    ? `<img src="${escapeHtml(movie.poster)}" class="match-poster" alt="${escapeHtml(movie.title)}">`
                     : `<div class="match-poster" style="display: flex; align-items: center; justify-content: center; font-size: 40px;">${movie.poster}</div>`;
 
                 return `
                     <div class="match-card" onclick="selectFinalMovie(${movie.id})">
                         ${posterContent}
                         <div class="match-info">
-                            <div class="match-title">${movie.title}</div>
-                            <div class="match-description">${movie.overview}</div>
+                            <div class="match-title">${escapeHtml(movie.title)}</div>
+                            <div class="match-description">${escapeHtml(movie.overview)}</div>
                         </div>
                     </div>
                 `;
@@ -1346,9 +1643,19 @@
 
                 // Wait for partner selection
                 const partnerKey = isHost ? 'partnerSelection' : 'hostSelection';
-                database.ref(`sessions/${sessionId}/${partnerKey}`).on('value', (snapshot) => {
+                const partnerRef = database.ref(`sessions/${sessionId}/${partnerKey}`);
+
+                let selectionMade = false;
+                const partnerSelectionCallback = (snapshot) => {
                     const partnerSelection = snapshot.val();
-                    if (partnerSelection) {
+                    if (partnerSelection && !selectionMade) {
+                        selectionMade = true;
+                        // Remove listener
+                        partnerRef.off('value', partnerSelectionCallback);
+                        activeFirebaseListeners = activeFirebaseListeners.filter(
+                            listener => listener.callback !== partnerSelectionCallback
+                        );
+
                         if (partnerSelection === movieId) {
                             showFinalChoice(movie);
                         } else {
@@ -1359,7 +1666,22 @@
                             showFinalChoice(finalMovie);
                         }
                     }
-                });
+                };
+
+                addFirebaseListener(partnerRef, 'value', partnerSelectionCallback);
+
+                // Add timeout
+                setTimeout(() => {
+                    if (!selectionMade) {
+                        selectionMade = true;
+                        partnerRef.off('value', partnerSelectionCallback);
+                        activeFirebaseListeners = activeFirebaseListeners.filter(
+                            listener => listener.callback !== partnerSelectionCallback
+                        );
+                        alert('Время ожидания выбора партнера истекло.');
+                        showFinalChoice(movie); // Show user's choice
+                    }
+                }, 2 * 60 * 1000); // 2 minutes for final selection
             } else {
                 showFinalChoice(movie);
             }
@@ -1368,14 +1690,82 @@
         function showFinalChoice(movie) {
             showScreen('finalScreen');
             const posterContent = movie.poster.startsWith('http')
-                ? `<img src="${movie.poster}" class="final-poster" alt="${movie.title}">`
+                ? `<img src="${escapeHtml(movie.poster)}" class="final-poster" alt="${escapeHtml(movie.title)}">`
                 : `<div style="font-size: 120px; margin-bottom: 20px;">${movie.poster}</div>`;
 
             document.getElementById('finalMovie').innerHTML = `
                 ${posterContent}
-                <h2 style="font-size: 28px; margin-bottom: 15px;">${movie.title}</h2>
-                <p style="font-size: 16px; opacity: 0.9;">${movie.overview}</p>
+                <h2 style="font-size: 28px; margin-bottom: 15px;">${escapeHtml(movie.title)}</h2>
+                <p style="font-size: 16px; opacity: 0.9;">${escapeHtml(movie.overview)}</p>
             `;
+
+            // Trigger confetti animation
+            setTimeout(() => playConfetti(), 100);
+        }
+
+        // Confetti animation
+        function playConfetti() {
+            const canvas = document.createElement('canvas');
+            canvas.style.position = 'fixed';
+            canvas.style.top = '0';
+            canvas.style.left = '0';
+            canvas.style.width = '100%';
+            canvas.style.height = '100%';
+            canvas.style.pointerEvents = 'none';
+            canvas.style.zIndex = '999';
+            document.body.appendChild(canvas);
+
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            const ctx = canvas.getContext('2d');
+            const confetti = [];
+            const colors = ['#667eea', '#764ba2', '#2ed573', '#ff4757', '#ffd700', '#2196f3'];
+
+            // Create confetti particles
+            for (let i = 0; i < 150; i++) {
+                confetti.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height - canvas.height,
+                    r: Math.random() * 6 + 4,
+                    d: Math.random() * 10 + 5,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    tilt: Math.random() * 10 - 5,
+                    tiltAngleIncremental: Math.random() * 0.07 + 0.05,
+                    tiltAngle: 0
+                });
+            }
+
+            function drawConfetti() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                confetti.forEach((c, index) => {
+                    ctx.beginPath();
+                    ctx.lineWidth = c.r / 2;
+                    ctx.strokeStyle = c.color;
+                    ctx.moveTo(c.x + c.tilt + c.r, c.y);
+                    ctx.lineTo(c.x + c.tilt, c.y + c.tilt + c.r);
+                    ctx.stroke();
+
+                    c.tiltAngle += c.tiltAngleIncremental;
+                    c.y += (Math.cos(c.d) + 3 + c.r / 2) / 2;
+                    c.x += Math.sin(c.d);
+                    c.tilt = Math.sin(c.tiltAngle - index / 3) * 15;
+
+                    if (c.y > canvas.height) {
+                        confetti.splice(index, 1);
+                    }
+                });
+
+                if (confetti.length > 0) {
+                    requestAnimationFrame(drawConfetti);
+                } else {
+                    // Remove canvas when done
+                    setTimeout(() => canvas.remove(), 100);
+                }
+            }
+
+            drawConfetti();
         }
 
         function showScreen(screenId) {
@@ -1389,10 +1779,38 @@
             return Math.random().toString(36).substring(2, 10);
         }
 
+        // Toast notification system
+        function showToast(message, type = 'info', duration = 3000) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+
+            const icons = {
+                success: '✓',
+                error: '✗',
+                info: 'ℹ'
+            };
+
+            toast.innerHTML = `
+                <span class="toast-icon">${icons[type] || icons.info}</span>
+                <span class="toast-message">${escapeHtml(message)}</span>
+            `;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(20px)';
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
+
         function copyLink() {
             const link = document.getElementById('sessionLink').textContent;
             navigator.clipboard.writeText(link).then(() => {
-                alert('Ссылка скопирована!');
+                showToast('Ссылка скопирована!', 'success');
+            }).catch(() => {
+                showToast('Ошибка копирования', 'error');
             });
         }
 
@@ -1412,34 +1830,18 @@
             console.log('Joining session from URL:', sessionId);
 
             // Wait for Firebase to initialize before joining
-            if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
-                // Firebase is configured, wait for it to load
-                console.log('Waiting for Firebase to initialize...');
-                let attempts = 0;
-                const checkFirebase = setInterval(() => {
-                    attempts++;
-                    console.log(`Firebase check attempt ${attempts}, database:`, database);
-
-                    if (database !== null) {
-                        clearInterval(checkFirebase);
-                        console.log('Firebase ready, joining session');
-                        joinSession(sessionId);
-                    }
-                }, 100);
-
-                // Timeout after 10 seconds
-                setTimeout(() => {
-                    if (database === null) {
-                        clearInterval(checkFirebase);
-                        console.error('Firebase initialization timeout');
-                        alert('Ошибка подключения к Firebase. Попробуйте обновить страницу.');
-                        window.location.href = window.location.pathname;
-                    }
-                }, 10000);
-            } else {
-                alert('Firebase не настроен. Невозможно присоединиться к сессии.');
-                window.location.href = window.location.pathname;
-            }
+            (async () => {
+                try {
+                    console.log('Waiting for Firebase to initialize...');
+                    await waitForFirebase();
+                    console.log('Firebase ready, joining session');
+                    await joinSession(sessionId);
+                } catch (error) {
+                    console.error('Firebase initialization failed:', error);
+                    alert('Ошибка подключения к Firebase: ' + error.message + '\nПопробуйте обновить страницу.');
+                    window.location.href = window.location.pathname;
+                }
+            })();
         } else {
             initializeUI();
         }
