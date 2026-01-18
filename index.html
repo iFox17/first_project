@@ -874,20 +874,30 @@
                 document.querySelector('.session-link').style.display = 'block';
                 document.querySelector('.waiting-message p').textContent = 'Загрузка фильмов...';
 
-                await database.ref(`sessions/${sessionId}`).set({
-                    genres: selectedGenres,
-                    countries: selectedCountries,
-                    movieCount: movieCount,
-                    minYear: minYear,
-                    host: true,
-                    partner: false,
-                    hostChoices: {},
-                    partnerChoices: {}
-                });
+                try {
+                    await database.ref(`sessions/${sessionId}`).set({
+                        genres: selectedGenres,
+                        countries: selectedCountries,
+                        movieCount: movieCount,
+                        minYear: minYear,
+                        host: true,
+                        partner: false,
+                        hostChoices: {},
+                        partnerChoices: {},
+                        created: Date.now()
+                    });
+                    console.log('Session created in Firebase:', sessionId);
+                } catch (error) {
+                    console.error('Error creating session in Firebase:', error);
+                    alert('Ошибка создания сессии: ' + error.message);
+                    showScreen('setupScreen');
+                    return;
+                }
 
                 // Listen for partner joining
                 database.ref(`sessions/${sessionId}/partner`).on('value', (snapshot) => {
                     if (snapshot.val() === true) {
+                        console.log('Partner joined, starting swipe phase');
                         startSwipePhase();
                     }
                 });
@@ -932,32 +942,45 @@
             document.querySelector('.session-link').style.display = 'none';
 
             if (database) {
-                const sessionRef = database.ref(`sessions/${sessionId}`);
-                const snapshot = await sessionRef.once('value');
+                try {
+                    console.log('Attempting to join session:', sessionId);
+                    const sessionRef = database.ref(`sessions/${sessionId}`);
+                    const snapshot = await sessionRef.once('value');
 
-                if (!snapshot.exists()) {
-                    alert('Сессия не найдена!');
-                    window.location.href = window.location.pathname; // Redirect to home
-                    return;
+                    console.log('Session snapshot exists:', snapshot.exists());
+
+                    if (!snapshot.exists()) {
+                        console.error('Session not found:', sessionId);
+                        alert('Сессия не найдена! Возможно, она ещё не создана или истекла.');
+                        window.location.href = window.location.pathname; // Redirect to home
+                        return;
+                    }
+
+                    const sessionData = snapshot.val();
+                    console.log('Session data:', sessionData);
+
+                    selectedGenres = sessionData.genres;
+                    selectedCountries = sessionData.countries || [];
+                    movieCount = sessionData.movieCount;
+                    minYear = sessionData.minYear || 2000;
+                    isHost = false;
+
+                    // Mark partner as joined
+                    await sessionRef.update({ partner: true });
+                    console.log('Marked as partner joined');
+
+                    // Listen for host choices
+                    database.ref(`sessions/${sessionId}/hostChoices`).on('value', (snapshot) => {
+                        partnerChoices = snapshot.val() || {};
+                    });
+
+                    await fetchMovies();
+                    startSwipePhase();
+                } catch (error) {
+                    console.error('Error joining session:', error);
+                    alert('Ошибка при подключении к сессии: ' + error.message);
+                    window.location.href = window.location.pathname;
                 }
-
-                const sessionData = snapshot.val();
-                selectedGenres = sessionData.genres;
-                selectedCountries = sessionData.countries || [];
-                movieCount = sessionData.movieCount;
-                minYear = sessionData.minYear || 2000;
-                isHost = false;
-
-                // Mark partner as joined
-                await sessionRef.update({ partner: true });
-
-                // Listen for host choices
-                database.ref(`sessions/${sessionId}/hostChoices`).on('value', (snapshot) => {
-                    partnerChoices = snapshot.val() || {};
-                });
-
-                await fetchMovies();
-                startSwipePhase();
             } else {
                 alert('Firebase не настроен. Невозможно присоединиться к сессии.');
                 window.location.href = window.location.pathname;
@@ -1386,20 +1409,30 @@
 
         if (sessionParam) {
             sessionId = sessionParam;
+            console.log('Joining session from URL:', sessionId);
+
             // Wait for Firebase to initialize before joining
             if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
                 // Firebase is configured, wait for it to load
+                console.log('Waiting for Firebase to initialize...');
+                let attempts = 0;
                 const checkFirebase = setInterval(() => {
-                    if (database !== null || useFirebase === true) {
+                    attempts++;
+                    console.log(`Firebase check attempt ${attempts}, database:`, database);
+
+                    if (database !== null) {
                         clearInterval(checkFirebase);
+                        console.log('Firebase ready, joining session');
                         joinSession(sessionId);
                     }
                 }, 100);
+
                 // Timeout after 10 seconds
                 setTimeout(() => {
                     if (database === null) {
                         clearInterval(checkFirebase);
-                        alert('Ошибка подключения к Firebase');
+                        console.error('Firebase initialization timeout');
+                        alert('Ошибка подключения к Firebase. Попробуйте обновить страницу.');
                         window.location.href = window.location.pathname;
                     }
                 }, 10000);
