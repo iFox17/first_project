@@ -182,6 +182,75 @@
             padding: 20px 0;
         }
 
+        .swipe-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+            gap: 15px;
+        }
+
+        .selected-genres {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px 15px;
+            border-radius: 10px;
+            font-size: 13px;
+        }
+
+        .selected-genres strong {
+            display: block;
+            margin-bottom: 5px;
+            opacity: 0.8;
+        }
+
+        .genre-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .genre-tag {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 3px 8px;
+            border-radius: 5px;
+            font-size: 11px;
+        }
+
+        .movies-counter {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px 15px;
+            border-radius: 10px;
+            text-align: center;
+            min-width: 100px;
+        }
+
+        .counter-value {
+            font-size: 24px;
+            font-weight: bold;
+            display: block;
+        }
+
+        .counter-label {
+            font-size: 11px;
+            opacity: 0.8;
+        }
+
+        .partner-status {
+            background: rgba(46, 213, 115, 0.2);
+            border: 1px solid rgba(46, 213, 115, 0.5);
+            padding: 10px 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 14px;
+            display: none;
+        }
+
+        .partner-status.show {
+            display: block;
+        }
+
         .progress-bar {
             background: rgba(255, 255, 255, 0.2);
             height: 8px;
@@ -226,34 +295,78 @@
 
         .movie-poster {
             width: 100%;
-            height: 70%;
+            height: 55%;
             object-fit: cover;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 100px;
+            position: relative;
+        }
+
+        .movie-rating {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #ffd700;
+            padding: 5px 10px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
         }
 
         .movie-info {
-            padding: 20px;
+            padding: 15px;
             color: #333;
+            height: 45%;
+            overflow-y: auto;
         }
 
         .movie-title {
-            font-size: 22px;
+            font-size: 20px;
             font-weight: bold;
             margin-bottom: 8px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            line-height: 1.2;
+        }
+
+        .movie-meta {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 8px;
+            font-size: 12px;
+            color: #888;
+            flex-wrap: wrap;
+        }
+
+        .movie-meta span {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+
+        .movie-genres {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+
+        .movie-genre {
+            background: #667eea;
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 5px;
+            font-size: 11px;
         }
 
         .movie-description {
-            font-size: 14px;
+            font-size: 13px;
             color: #666;
+            line-height: 1.4;
             display: -webkit-box;
-            -webkit-line-clamp: 2;
+            -webkit-line-clamp: 4;
             -webkit-box-orient: vertical;
             overflow: hidden;
         }
@@ -492,6 +605,21 @@
         <!-- Swipe Screen -->
         <div class="screen" id="swipeScreen">
             <div class="swipe-container">
+                <div class="swipe-info">
+                    <div class="selected-genres" id="selectedGenresDisplay">
+                        <strong>Жанры:</strong>
+                        <div class="genre-tags" id="genreTags"></div>
+                    </div>
+                    <div class="movies-counter">
+                        <span class="counter-value" id="moviesRemaining">0</span>
+                        <span class="counter-label">осталось</span>
+                    </div>
+                </div>
+
+                <div class="partner-status" id="partnerStatus">
+                    ✓ Партнер закончил просмотр
+                </div>
+
                 <div class="progress-bar">
                     <div class="progress-fill" id="progressFill" style="width: 0%"></div>
                 </div>
@@ -731,16 +859,55 @@
             if (TMDB_API_KEY !== 'YOUR_TMDB_API_KEY') {
                 try {
                     const genreParam = selectedGenres.join(',');
-                    const response = await fetch(
-                        `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_genres=${genreParam}&language=ru-RU&sort_by=popularity.desc&page=1`
-                    );
-                    const data = await response.json();
-                    movies = data.results.slice(0, movieCount).map(movie => ({
-                        id: movie.id,
-                        title: movie.title,
-                        overview: movie.overview,
-                        poster: movie.poster_path ? `${TMDB_IMAGE_BASE}${movie.poster_path}` : '🎬'
-                    }));
+                    const pagesNeeded = Math.ceil(movieCount / 20);
+                    const allMovies = [];
+
+                    // Fetch multiple pages if needed
+                    for (let page = 1; page <= Math.min(pagesNeeded, 5); page++) {
+                        const response = await fetch(
+                            `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_genres=${genreParam}&language=ru-RU&sort_by=popularity.desc&page=${page}&include_adult=false`
+                        );
+                        const data = await response.json();
+                        allMovies.push(...data.results);
+                        if (allMovies.length >= movieCount) break;
+                    }
+
+                    // Fetch detailed info for each movie including credits
+                    const moviePromises = allMovies.slice(0, movieCount).map(async (movie) => {
+                        try {
+                            const detailsResponse = await fetch(
+                                `${TMDB_BASE_URL}/movie/${movie.id}?api_key=${TMDB_API_KEY}&language=ru-RU&append_to_response=credits`
+                            );
+                            const details = await detailsResponse.json();
+
+                            const director = details.credits?.crew?.find(person => person.job === 'Director');
+                            const movieGenres = details.genres?.map(g => g.name) || [];
+
+                            return {
+                                id: movie.id,
+                                title: movie.title,
+                                overview: movie.overview || 'Описание отсутствует',
+                                poster: movie.poster_path ? `${TMDB_IMAGE_BASE}${movie.poster_path}` : '🎬',
+                                rating: movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A',
+                                year: movie.release_date ? movie.release_date.split('-')[0] : 'N/A',
+                                director: director ? director.name : 'Неизвестен',
+                                movieGenres: movieGenres
+                            };
+                        } catch (err) {
+                            return {
+                                id: movie.id,
+                                title: movie.title,
+                                overview: movie.overview || 'Описание отсутствует',
+                                poster: movie.poster_path ? `${TMDB_IMAGE_BASE}${movie.poster_path}` : '🎬',
+                                rating: movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A',
+                                year: movie.release_date ? movie.release_date.split('-')[0] : 'N/A',
+                                director: 'Неизвестен',
+                                movieGenres: []
+                            };
+                        }
+                    });
+
+                    movies = await Promise.all(moviePromises);
                 } catch (error) {
                     console.error('Error fetching movies:', error);
                 }
@@ -749,6 +916,25 @@
 
         function startSwipePhase() {
             showScreen('swipeScreen');
+
+            // Display selected genres
+            const genreTags = document.getElementById('genreTags');
+            genreTags.innerHTML = selectedGenres.map(genreId => {
+                const genre = genres.find(g => g.id === genreId);
+                return `<span class="genre-tag">${genre ? genre.name : ''}</span>`;
+            }).join('');
+
+            // Listen for partner completion if in Firebase mode
+            if (database && sessionId) {
+                const partnerChoicesKey = isHost ? 'partnerChoices' : 'hostChoices';
+                database.ref(`sessions/${sessionId}/${partnerChoicesKey}`).on('value', (snapshot) => {
+                    const choices = snapshot.val() || {};
+                    if (Object.keys(choices).length >= movies.length && currentMovieIndex < movies.length) {
+                        document.getElementById('partnerStatus').classList.add('show');
+                    }
+                });
+            }
+
             renderCurrentCard();
         }
 
@@ -767,13 +953,27 @@
             card.id = 'currentCard';
 
             const posterContent = movie.poster.startsWith('http')
-                ? `<img src="${movie.poster}" class="movie-poster" alt="${movie.title}">`
+                ? `<img src="${movie.poster}" class="movie-poster" alt="${movie.title}">
+                   ${movie.rating !== 'N/A' ? `<div class="movie-rating">⭐ ${movie.rating}</div>` : ''}`
                 : `<div class="movie-poster">${movie.poster}</div>`;
+
+            const genresHtml = movie.movieGenres && movie.movieGenres.length > 0
+                ? `<div class="movie-genres">${movie.movieGenres.slice(0, 3).map(g => `<span class="movie-genre">${g}</span>`).join('')}</div>`
+                : '';
+
+            const metaHtml = `
+                <div class="movie-meta">
+                    ${movie.year !== 'N/A' ? `<span>📅 ${movie.year}</span>` : ''}
+                    ${movie.director !== 'Неизвестен' ? `<span>🎬 ${movie.director}</span>` : ''}
+                </div>
+            `;
 
             card.innerHTML = `
                 ${posterContent}
                 <div class="movie-info">
                     <div class="movie-title">${movie.title}</div>
+                    ${metaHtml}
+                    ${genresHtml}
                     <div class="movie-description">${movie.overview}</div>
                 </div>
             `;
@@ -781,6 +981,7 @@
             cardStack.appendChild(card);
             setupSwipeHandlers(card);
             updateProgress();
+            updateCounter();
         }
 
         function setupSwipeHandlers(card) {
@@ -866,6 +1067,11 @@
         function updateProgress() {
             const progress = (currentMovieIndex / movies.length) * 100;
             document.getElementById('progressFill').style.width = `${progress}%`;
+        }
+
+        function updateCounter() {
+            const remaining = movies.length - currentMovieIndex;
+            document.getElementById('moviesRemaining').textContent = remaining;
         }
 
         async function checkMatches() {
