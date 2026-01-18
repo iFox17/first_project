@@ -815,8 +815,27 @@
             sessionId = generateSessionId();
             isHost = true;
 
+            // Show loading
+            showScreen('linkScreen');
+            document.querySelector('.session-info h2').textContent = 'Загрузка фильмов...';
+            document.querySelector('.session-link').style.display = 'none';
+            document.querySelector('.waiting-message p').textContent = 'Пожалуйста, подождите...';
+
             // Fetch movies
-            await fetchMovies();
+            try {
+                await fetchMovies();
+
+                if (movies.length === 0) {
+                    alert('Не удалось загрузить фильмы. Попробуйте выбрать другие жанры или страны.');
+                    showScreen('setupScreen');
+                    return;
+                }
+            } catch (error) {
+                console.error('Error in createSession:', error);
+                alert('Ошибка при загрузке фильмов: ' + error.message);
+                showScreen('setupScreen');
+                return;
+            }
 
             // Create session in Firebase
             if (database) {
@@ -839,6 +858,9 @@
 
                 // Show link screen
                 showScreen('linkScreen');
+                document.querySelector('.session-info h2').textContent = 'Сессия создана!';
+                document.querySelector('.session-link').style.display = 'block';
+                document.querySelector('.waiting-message p').textContent = 'Ожидание подключения второго участника...';
                 const link = `${window.location.origin}${window.location.pathname}?session=${sessionId}`;
                 document.getElementById('sessionLink').textContent = link;
             } else {
@@ -927,28 +949,22 @@
                         if (allMovies.length >= movieCount * 1.5) break; // Get extra to account for filtering
                     }
 
-                    // Fetch detailed info for each movie including credits and check languages
-                    const moviePromises = allMovies.slice(0, movieCount * 2).map(async (movie) => {
+                    // Fetch detailed info for each movie including credits
+                    const moviePromises = allMovies.slice(0, movieCount * 1.5).map(async (movie) => {
                         try {
-                            // Fetch movie details with translations
+                            // Fetch movie details
                             const detailsResponse = await fetch(
-                                `${TMDB_BASE_URL}/movie/${movie.id}?api_key=${TMDB_API_KEY}&language=ru-RU&append_to_response=credits,translations`
+                                `${TMDB_BASE_URL}/movie/${movie.id}?api_key=${TMDB_API_KEY}&language=ru-RU&append_to_response=credits`
                             );
                             const details = await detailsResponse.json();
 
-                            // Check if movie has Russian or English translation/dubbing
-                            const translations = details.translations?.translations || [];
-                            const hasRussian = translations.some(t => t.iso_639_1 === 'ru');
-                            const hasEnglish = translations.some(t => t.iso_639_1 === 'en');
+                            // Only check original language - most popular movies have Russian dubbing/subtitles available
+                            // We include all languages except rare ones
                             const originalLanguage = details.original_language;
+                            const excludedLanguages = ['th', 'vi', 'id', 'ms', 'tl']; // Exclude Thai, Vietnamese, Indonesian, Malay, Tagalog
 
-                            // Include movie if it has Russian, English, or is originally in Russian/English
-                            const hasRequiredLanguage = hasRussian || hasEnglish ||
-                                                       originalLanguage === 'ru' ||
-                                                       originalLanguage === 'en';
-
-                            if (!hasRequiredLanguage) {
-                                return null; // Skip this movie
+                            if (excludedLanguages.includes(originalLanguage)) {
+                                return null; // Skip movies in excluded languages
                             }
 
                             const director = details.credits?.crew?.find(person => person.job === 'Director');
@@ -971,9 +987,20 @@
 
                     const allMovieDetails = await Promise.all(moviePromises);
                     // Filter out null values and take only requested amount
-                    movies = allMovieDetails.filter(movie => movie !== null).slice(0, movieCount);
+                    const filteredMovies = allMovieDetails.filter(movie => movie !== null);
+
+                    console.log(`Loaded ${filteredMovies.length} movies after language filtering`);
+
+                    if (filteredMovies.length === 0) {
+                        console.warn('No movies found matching criteria. Using demo movies.');
+                        // Keep demo movies as fallback
+                    } else {
+                        movies = filteredMovies.slice(0, movieCount);
+                    }
                 } catch (error) {
                     console.error('Error fetching movies:', error);
+                    console.log('Using demo movies as fallback');
+                    // Demo movies already loaded above, so we keep them
                 }
             }
         }
