@@ -582,6 +582,13 @@
                     </div>
                 </div>
 
+                <div class="setup-section">
+                    <h3>Страны производства</h3>
+                    <div class="genre-grid" id="countryGrid">
+                        <!-- Countries will be added dynamically -->
+                    </div>
+                </div>
+
                 <button class="btn" id="createSessionBtn">Создать сессию</button>
             </div>
         </div>
@@ -721,10 +728,25 @@
             { id: 16, name: 'Мультфильм' }
         ];
 
+        // Available countries (ISO 3166-1)
+        const countries = [
+            { code: 'US', name: 'США' },
+            { code: 'GB', name: 'Великобритания' },
+            { code: 'FR', name: 'Франция' },
+            { code: 'DE', name: 'Германия' },
+            { code: 'IT', name: 'Италия' },
+            { code: 'ES', name: 'Испания' },
+            { code: 'RU', name: 'Россия' },
+            { code: 'JP', name: 'Япония' },
+            { code: 'KR', name: 'Корея' },
+            { code: 'CN', name: 'Китай' }
+        ];
+
         // App State
         let sessionId = null;
         let isHost = false;
         let selectedGenres = [];
+        let selectedCountries = [];
         let movieCount = 20;
         let movies = [];
         let currentMovieIndex = 0;
@@ -741,6 +763,16 @@
                 btn.textContent = genre.name;
                 btn.onclick = () => toggleGenre(genre.id, btn);
                 genreGrid.appendChild(btn);
+            });
+
+            // Setup countries
+            const countryGrid = document.getElementById('countryGrid');
+            countries.forEach(country => {
+                const btn = document.createElement('button');
+                btn.className = 'genre-btn';
+                btn.textContent = country.name;
+                btn.onclick = () => toggleCountry(country.code, btn);
+                countryGrid.appendChild(btn);
             });
 
             // Setup slider
@@ -763,6 +795,17 @@
             }
         }
 
+        function toggleCountry(countryCode, btn) {
+            const index = selectedCountries.indexOf(countryCode);
+            if (index > -1) {
+                selectedCountries.splice(index, 1);
+                btn.classList.remove('selected');
+            } else {
+                selectedCountries.push(countryCode);
+                btn.classList.add('selected');
+            }
+        }
+
         async function createSession() {
             if (selectedGenres.length === 0) {
                 alert('Выберите хотя бы один жанр!');
@@ -779,6 +822,7 @@
             if (database) {
                 await database.ref(`sessions/${sessionId}`).set({
                     genres: selectedGenres,
+                    countries: selectedCountries,
                     movieCount: movieCount,
                     host: true,
                     partner: false,
@@ -821,6 +865,7 @@
 
                 const sessionData = snapshot.val();
                 selectedGenres = sessionData.genres;
+                selectedCountries = sessionData.countries || [];
                 movieCount = sessionData.movieCount;
                 isHost = false;
 
@@ -859,26 +904,52 @@
             if (TMDB_API_KEY !== 'YOUR_TMDB_API_KEY') {
                 try {
                     const genreParam = selectedGenres.join(',');
+                    const countryParam = selectedCountries.length > 0 ? selectedCountries.join('|') : '';
                     const pagesNeeded = Math.ceil(movieCount / 20);
                     const allMovies = [];
 
                     // Fetch multiple pages if needed
-                    for (let page = 1; page <= Math.min(pagesNeeded, 5); page++) {
-                        const response = await fetch(
-                            `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_genres=${genreParam}&language=ru-RU&sort_by=popularity.desc&page=${page}&include_adult=false`
-                        );
+                    for (let page = 1; page <= Math.min(pagesNeeded, 10); page++) {
+                        let url = `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_genres=${genreParam}&language=ru-RU&sort_by=popularity.desc&page=${page}&include_adult=false&vote_average.gte=5`;
+
+                        // Add country filter if selected
+                        if (countryParam) {
+                            url += `&with_origin_country=${countryParam}`;
+                        }
+
+                        const response = await fetch(url);
                         const data = await response.json();
-                        allMovies.push(...data.results);
-                        if (allMovies.length >= movieCount) break;
+
+                        // Filter movies with rating >= 5
+                        const filteredResults = data.results.filter(movie => movie.vote_average >= 5);
+                        allMovies.push(...filteredResults);
+
+                        if (allMovies.length >= movieCount * 1.5) break; // Get extra to account for filtering
                     }
 
-                    // Fetch detailed info for each movie including credits
-                    const moviePromises = allMovies.slice(0, movieCount).map(async (movie) => {
+                    // Fetch detailed info for each movie including credits and check languages
+                    const moviePromises = allMovies.slice(0, movieCount * 2).map(async (movie) => {
                         try {
+                            // Fetch movie details with translations
                             const detailsResponse = await fetch(
-                                `${TMDB_BASE_URL}/movie/${movie.id}?api_key=${TMDB_API_KEY}&language=ru-RU&append_to_response=credits`
+                                `${TMDB_BASE_URL}/movie/${movie.id}?api_key=${TMDB_API_KEY}&language=ru-RU&append_to_response=credits,translations`
                             );
                             const details = await detailsResponse.json();
+
+                            // Check if movie has Russian or English translation/dubbing
+                            const translations = details.translations?.translations || [];
+                            const hasRussian = translations.some(t => t.iso_639_1 === 'ru');
+                            const hasEnglish = translations.some(t => t.iso_639_1 === 'en');
+                            const originalLanguage = details.original_language;
+
+                            // Include movie if it has Russian, English, or is originally in Russian/English
+                            const hasRequiredLanguage = hasRussian || hasEnglish ||
+                                                       originalLanguage === 'ru' ||
+                                                       originalLanguage === 'en';
+
+                            if (!hasRequiredLanguage) {
+                                return null; // Skip this movie
+                            }
 
                             const director = details.credits?.crew?.find(person => person.job === 'Director');
                             const movieGenres = details.genres?.map(g => g.name) || [];
@@ -894,20 +965,13 @@
                                 movieGenres: movieGenres
                             };
                         } catch (err) {
-                            return {
-                                id: movie.id,
-                                title: movie.title,
-                                overview: movie.overview || 'Описание отсутствует',
-                                poster: movie.poster_path ? `${TMDB_IMAGE_BASE}${movie.poster_path}` : '🎬',
-                                rating: movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A',
-                                year: movie.release_date ? movie.release_date.split('-')[0] : 'N/A',
-                                director: 'Неизвестен',
-                                movieGenres: []
-                            };
+                            return null; // Skip on error
                         }
                     });
 
-                    movies = await Promise.all(moviePromises);
+                    const allMovieDetails = await Promise.all(moviePromises);
+                    // Filter out null values and take only requested amount
+                    movies = allMovieDetails.filter(movie => movie !== null).slice(0, movieCount);
                 } catch (error) {
                     console.error('Error fetching movies:', error);
                 }
