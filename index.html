@@ -534,10 +534,6 @@
         </div>
     </div>
 
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-
     <script>
         // TMDB API Configuration
         const TMDB_API_KEY = 'YOUR_TMDB_API_KEY'; // Пользователь должен будет получить свой ключ
@@ -556,12 +552,32 @@
         };
 
         // Initialize Firebase
-        let database;
-        try {
-            firebase.initializeApp(firebaseConfig);
-            database = firebase.database();
-        } catch (error) {
-            console.log('Firebase не настроен. Используется демо-режим.');
+        let database = null;
+        let useFirebase = false;
+
+        // Check if Firebase should be initialized
+        if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
+            // Load Firebase SDK dynamically only if configured
+            const script1 = document.createElement('script');
+            script1.src = 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js';
+            script1.onload = () => {
+                const script2 = document.createElement('script');
+                script2.src = 'https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js';
+                script2.onload = () => {
+                    try {
+                        firebase.initializeApp(firebaseConfig);
+                        database = firebase.database();
+                        useFirebase = true;
+                        console.log('Firebase подключен');
+                    } catch (error) {
+                        console.log('Ошибка инициализации Firebase:', error);
+                    }
+                };
+                document.head.appendChild(script2);
+            };
+            document.head.appendChild(script1);
+        } else {
+            console.log('Firebase не настроен. Работает в демо-режиме (только для одного пользователя).');
         }
 
         // Available genres
@@ -627,6 +643,9 @@
             sessionId = generateSessionId();
             isHost = true;
 
+            // Fetch movies
+            await fetchMovies();
+
             // Create session in Firebase
             if (database) {
                 await database.ref(`sessions/${sessionId}`).set({
@@ -644,15 +663,15 @@
                         startSwipePhase();
                     }
                 });
+
+                // Show link screen
+                showScreen('linkScreen');
+                const link = `${window.location.origin}${window.location.pathname}?session=${sessionId}`;
+                document.getElementById('sessionLink').textContent = link;
+            } else {
+                // Demo mode - start immediately
+                startSwipePhase();
             }
-
-            // Show link screen
-            showScreen('linkScreen');
-            const link = `${window.location.origin}${window.location.pathname}?session=${sessionId}`;
-            document.getElementById('sessionLink').textContent = link;
-
-            // Fetch movies
-            await fetchMovies();
         }
 
         async function joinSession(sessionId) {
@@ -855,8 +874,11 @@
                     }
                 });
             } else {
-                // Demo mode - simulate matches
-                showMatches();
+                // Demo mode - simulate partner choices (randomly like 40-60% of movies)
+                movies.forEach(movie => {
+                    partnerChoices[movie.id] = Math.random() > 0.5;
+                });
+                setTimeout(() => showMatches(), 500);
             }
         }
 
