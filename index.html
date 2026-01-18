@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Книжный магазин "Золотая библиотека"</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Georgia', serif;
+            background: linear-gradient(135deg, #0a1929 0%, #1a237e 50%, #0d47a1 100%);
+            min-height: 100vh;
+            color: #fff;
+        }
+
+        header {
+            background: rgba(10, 25, 41, 0.9);
+            padding: 20px 0;
+            border-bottom: 2px solid #ffd700;
+            box-shadow: 0 2px 20px rgba(255, 215, 0, 0.3);
+        }
+
+        nav {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+        }
+
+        .logo {
+            font-size: 28px;
+            font-weight: bold;
+            color: #ffd700;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 30px;
+        }
+
+        .nav-links a {
+            color: #ffd700;
+            text-decoration: none;
+            transition: all 0.3s;
+            font-size: 16px;
+        }
+
+        .nav-links a:hover {
+            color: #fff;
+            text-shadow: 0 0 10px #ffd700;
+        }
+
+        .upload-btn {
+            background: linear-gradient(135deg, #ffd700, #ffed4e);
+            color: #0a1929;
+            padding: 10px 25px;
+            border-radius: 25px;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+            transition: all 0.3s;
+        }
+
+        .upload-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 20px rgba(255, 215, 0, 0.5);
+        }
+
+        .hero {
+            text-align: center;
+            padding: 60px 20px;
+            background: rgba(255, 215, 0, 0.1);
+            margin: 20px;
+            border-radius: 15px;
+        }
+
+        .hero h1 {
+            font-size: 48px;
+            color: #ffd700;
+            margin-bottom: 15px;
+            text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.7);
+        }
+
+        .hero p {
+            font-size: 20px;
+            color: #e0e0e0;
+        }
+
+        .filters {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 20px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            background: rgba(255, 215, 0, 0.2);
+            border: 2px solid #ffd700;
+            color: #ffd700;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .filter-btn:hover,
+        .filter-btn.active {
+            background: #ffd700;
+            color: #0a1929;
+        }
+
+        .books-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 30px;
+        }
+
+        .book-card {
+            background: linear-gradient(145deg, rgba(26, 35, 126, 0.6), rgba(13, 71, 161, 0.4));
+            border: 2px solid #ffd700;
+            border-radius: 15px;
+            padding: 20px;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .book-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 10px 30px rgba(255, 215, 0, 0.4);
+            border-color: #ffed4e;
+        }
+
+        .book-cover {
+            width: 100%;
+            height: 300px;
+            background: linear-gradient(135deg, #1e3a5f, #2c5f8d);
+            border-radius: 10px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 60px;
+            border: 1px solid #ffd700;
+        }
+
+        .book-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #ffd700;
+            margin-bottom: 10px;
+        }
+
+        .book-author {
+            font-size: 16px;
+            color: #b0b0b0;
+            margin-bottom: 5px;
+        }
+
+        .book-publisher {
+            font-size: 14px;
+            color: #ffd700;
+            opacity: 0.8;
+            margin-bottom: 15px;
+        }
+
+        .book-price {
+            font-size: 24px;
+            color: #ffd700;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+
+        .buy-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #ffd700, #ffed4e);
+            color: #0a1929;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .buy-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(255, 215, 0, 0.6);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: linear-gradient(145deg, #1a237e, #0d47a1);
+            padding: 40px;
+            border-radius: 20px;
+            border: 3px solid #ffd700;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .modal h2 {
+            color: #ffd700;
+            margin-bottom: 20px;
+        }
+
+        .modal input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border: 2px solid #ffd700;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            font-size: 16px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .modal-buttons button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .close-btn {
+            background: #666;
+            color: #fff;
+        }
+
+        .close-btn:hover {
+            background: #888;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="logo">📚 Золотая библиотека</div>
+            <div class="nav-links">
+                <a href="#books">Каталог</a>
+                <a href="#publishers">Издательства</a>
+                <a href="#my-books">Мои книги</a>
+                <a href="snake.html">⚡ Игра: Змейка</a>
+            </div>
+            <button class="upload-btn" onclick="openUploadModal()">Загрузить книгу</button>
+        </nav>
+    </header>
+
+    <div class="hero">
+        <h1>Электронная библиотека</h1>
+        <p>Тысячи книг от ведущих издательств мира</p>
+    </div>
+
+    <div class="filters">
+        <button class="filter-btn active" onclick="filterBooks('all')">Все книги</button>
+        <button class="filter-btn" onclick="filterBooks('fiction')">Художественная литература</button>
+        <button class="filter-btn" onclick="filterBooks('science')">Научная литература</button>
+        <button class="filter-btn" onclick="filterBooks('business')">Бизнес</button>
+    </div>
+
+    <div class="books-container" id="booksContainer">
+        <!-- Книги будут добавлены через JavaScript -->
+    </div>
+
+    <!-- Модальное окно для покупки -->
+    <div class="modal" id="buyModal">
+        <div class="modal-content">
+            <h2>Покупка книги</h2>
+            <p id="bookTitle" style="color: #e0e0e0; margin-bottom: 20px;"></p>
+            <input type="email" placeholder="Email для получения книги" id="emailInput">
+            <input type="text" placeholder="Номер карты" id="cardInput">
+            <div class="modal-buttons">
+                <button class="close-btn" onclick="closeBuyModal()">Отмена</button>
+                <button class="upload-btn" onclick="completePurchase()">Купить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для загрузки -->
+    <div class="modal" id="uploadModal">
+        <div class="modal-content">
+            <h2>Загрузить книгу</h2>
+            <input type="text" placeholder="Название книги" id="uploadTitle">
+            <input type="text" placeholder="Автор" id="uploadAuthor">
+            <input type="text" placeholder="Издательство" id="uploadPublisher">
+            <input type="number" placeholder="Цена (₽)" id="uploadPrice">
+            <input type="file" accept=".pdf,.epub" style="margin: 10px 0;">
+            <div class="modal-buttons">
+                <button class="close-btn" onclick="closeUploadModal()">Отмена</button>
+                <button class="upload-btn" onclick="completeUpload()">Загрузить</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const books = [
+            { id: 1, title: "Война и мир", author: "Лев Толстой", publisher: "АСТ", price: 499, category: "fiction", emoji: "📖" },
+            { id: 2, title: "Мастер и Маргарита", author: "Михаил Булгаков", publisher: "Эксмо", price: 399, category: "fiction", emoji: "🎭" },
+            { id: 3, title: "Краткая история времени", author: "Стивен Хокинг", publisher: "Corpus", price: 599, category: "science", emoji: "🔬" },
+            { id: 4, title: "Думай медленно... Решай быстро", author: "Даниэль Канеман", publisher: "АСТ", price: 699, category: "business", emoji: "💼" },
+            { id: 5, title: "Преступление и наказание", author: "Фёдор Достоевский", publisher: "Азбука", price: 449, category: "fiction", emoji: "⚖️" },
+            { id: 6, title: "Sapiens", author: "Юваль Ной Харари", publisher: "Синдбад", price: 799, category: "science", emoji: "🌍" },
+            { id: 7, title: "От хорошего к великому", author: "Джим Коллинз", publisher: "Манн, Иванов и Фербер", price: 850, category: "business", emoji: "📈" },
+            { id: 8, title: "Анна Каренина", author: "Лев Толстой", publisher: "Эксмо", price: 499, category: "fiction", emoji: "💔" },
+            { id: 9, title: "Квантовая физика для чайников", author: "Стивен Хольцнер", publisher: "Диалектика", price: 650, category: "science", emoji: "⚛️" },
+        ];
+
+        let currentCategory = 'all';
+
+        function renderBooks() {
+            const container = document.getElementById('booksContainer');
+            const filteredBooks = currentCategory === 'all'
+                ? books
+                : books.filter(book => book.category === currentCategory);
+
+            container.innerHTML = filteredBooks.map(book => `
+                <div class="book-card">
+                    <div class="book-cover">${book.emoji}</div>
+                    <div class="book-title">${book.title}</div>
+                    <div class="book-author">${book.author}</div>
+                    <div class="book-publisher">Издательство: ${book.publisher}</div>
+                    <div class="book-price">${book.price} ₽</div>
+                    <button class="buy-btn" onclick="openBuyModal('${book.title}', ${book.price})">Купить</button>
+                </div>
+            `).join('');
+        }
+
+        function filterBooks(category) {
+            currentCategory = category;
+            renderBooks();
+
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+        }
+
+        function openBuyModal(title, price) {
+            document.getElementById('buyModal').style.display = 'flex';
+            document.getElementById('bookTitle').textContent = `${title} - ${price} ₽`;
+        }
+
+        function closeBuyModal() {
+            document.getElementById('buyModal').style.display = 'none';
+        }
+
+        function completePurchase() {
+            const email = document.getElementById('emailInput').value;
+            if (email) {
+                alert('Спасибо за покупку! Книга отправлена на ' + email);
+                closeBuyModal();
+                document.getElementById('emailInput').value = '';
+                document.getElementById('cardInput').value = '';
+            } else {
+                alert('Пожалуйста, введите email');
+            }
+        }
+
+        function openUploadModal() {
+            document.getElementById('uploadModal').style.display = 'flex';
+        }
+
+        function closeUploadModal() {
+            document.getElementById('uploadModal').style.display = 'none';
+        }
+
+        function completeUpload() {
+            const title = document.getElementById('uploadTitle').value;
+            const author = document.getElementById('uploadAuthor').value;
+            const publisher = document.getElementById('uploadPublisher').value;
+            const price = document.getElementById('uploadPrice').value;
+
+            if (title && author && publisher && price) {
+                alert('Книга успешно загружена и отправлена на модерацию!');
+                closeUploadModal();
+                document.getElementById('uploadTitle').value = '';
+                document.getElementById('uploadAuthor').value = '';
+                document.getElementById('uploadPublisher').value = '';
+                document.getElementById('uploadPrice').value = '';
+            } else {
+                alert('Пожалуйста, заполните все поля');
+            }
+        }
+
+        // Инициализация
+        renderBooks();
+    </script>
+</body>
+</html>
