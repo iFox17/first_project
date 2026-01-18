@@ -864,30 +864,16 @@
             sessionId = generateSessionId();
             isHost = true;
 
-            // Show loading
-            showScreen('linkScreen');
-            document.querySelector('.session-info h2').textContent = 'Загрузка фильмов...';
-            document.querySelector('.session-link').style.display = 'none';
-            document.querySelector('.waiting-message p').textContent = 'Пожалуйста, подождите...';
-
-            // Fetch movies
-            try {
-                await fetchMovies();
-
-                if (movies.length === 0) {
-                    alert('Не удалось загрузить фильмы. Попробуйте выбрать другие жанры или страны.');
-                    showScreen('setupScreen');
-                    return;
-                }
-            } catch (error) {
-                console.error('Error in createSession:', error);
-                alert('Ошибка при загрузке фильмов: ' + error.message);
-                showScreen('setupScreen');
-                return;
-            }
-
-            // Create session in Firebase
+            // Create session in Firebase first
             if (database) {
+                // Show link screen immediately
+                showScreen('linkScreen');
+                document.querySelector('.session-info h2').textContent = 'Создание сессии...';
+                const link = `${window.location.origin}${window.location.pathname}?session=${sessionId}`;
+                document.getElementById('sessionLink').textContent = link;
+                document.querySelector('.session-link').style.display = 'block';
+                document.querySelector('.waiting-message p').textContent = 'Загрузка фильмов...';
+
                 await database.ref(`sessions/${sessionId}`).set({
                     genres: selectedGenres,
                     countries: selectedCountries,
@@ -905,17 +891,37 @@
                         startSwipePhase();
                     }
                 });
-
-                // Show link screen
-                showScreen('linkScreen');
-                document.querySelector('.session-info h2').textContent = 'Сессия создана!';
-                document.querySelector('.session-link').style.display = 'block';
-                document.querySelector('.waiting-message p').textContent = 'Ожидание подключения второго участника...';
-                const link = `${window.location.origin}${window.location.pathname}?session=${sessionId}`;
-                document.getElementById('sessionLink').textContent = link;
             } else {
-                // Demo mode - start immediately
-                startSwipePhase();
+                // Demo mode - show loading
+                showScreen('linkScreen');
+                document.querySelector('.session-info h2').textContent = 'Загрузка фильмов...';
+                document.querySelector('.session-link').style.display = 'none';
+                document.querySelector('.waiting-message p').textContent = 'Пожалуйста, подождите...';
+            }
+
+            // Fetch movies in background
+            try {
+                await fetchMovies();
+
+                if (movies.length === 0) {
+                    alert('Не удалось загрузить фильмы. Попробуйте выбрать другие жанры или страны.');
+                    showScreen('setupScreen');
+                    return;
+                }
+
+                // Update status after movies loaded
+                if (database) {
+                    document.querySelector('.session-info h2').textContent = 'Сессия создана!';
+                    document.querySelector('.waiting-message p').textContent = 'Ожидание подключения второго участника...';
+                } else {
+                    // Demo mode - start immediately
+                    startSwipePhase();
+                }
+            } catch (error) {
+                console.error('Error in createSession:', error);
+                alert('Ошибка при загрузке фильмов: ' + error.message);
+                showScreen('setupScreen');
+                return;
             }
         }
 
