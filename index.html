@@ -676,12 +676,18 @@
         }
 
         async function joinSession(sessionId) {
+            // Show loading
+            showScreen('linkScreen');
+            document.querySelector('.session-info h2').textContent = 'Подключение к сессии...';
+            document.querySelector('.session-link').style.display = 'none';
+
             if (database) {
                 const sessionRef = database.ref(`sessions/${sessionId}`);
                 const snapshot = await sessionRef.once('value');
 
                 if (!snapshot.exists()) {
                     alert('Сессия не найдена!');
+                    window.location.href = window.location.pathname; // Redirect to home
                     return;
                 }
 
@@ -700,6 +706,9 @@
 
                 await fetchMovies();
                 startSwipePhase();
+            } else {
+                alert('Firebase не настроен. Невозможно присоединиться к сессии.');
+                window.location.href = window.location.pathname;
             }
         }
 
@@ -995,9 +1004,30 @@
         // Check if joining session
         const urlParams = new URLSearchParams(window.location.search);
         const sessionParam = urlParams.get('session');
+
         if (sessionParam) {
             sessionId = sessionParam;
-            joinSession(sessionId);
+            // Wait for Firebase to initialize before joining
+            if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
+                // Firebase is configured, wait for it to load
+                const checkFirebase = setInterval(() => {
+                    if (database !== null || useFirebase === true) {
+                        clearInterval(checkFirebase);
+                        joinSession(sessionId);
+                    }
+                }, 100);
+                // Timeout after 10 seconds
+                setTimeout(() => {
+                    if (database === null) {
+                        clearInterval(checkFirebase);
+                        alert('Ошибка подключения к Firebase');
+                        window.location.href = window.location.pathname;
+                    }
+                }, 10000);
+            } else {
+                alert('Firebase не настроен. Невозможно присоединиться к сессии.');
+                window.location.href = window.location.pathname;
+            }
         } else {
             initializeUI();
         }
