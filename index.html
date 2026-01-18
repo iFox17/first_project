@@ -295,7 +295,7 @@
 
         .movie-poster {
             width: 100%;
-            height: 55%;
+            height: 65%;
             object-fit: cover;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             display: flex;
@@ -303,6 +303,12 @@
             justify-content: center;
             font-size: 100px;
             position: relative;
+        }
+
+        .movie-poster img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
 
         .movie-rating {
@@ -317,10 +323,36 @@
             font-weight: bold;
         }
 
+        .language-badges {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            display: flex;
+            gap: 5px;
+        }
+
+        .language-badge {
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 5px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .language-badge.rus {
+            background: rgba(0, 123, 255, 0.9);
+        }
+
+        .language-badge.eng {
+            background: rgba(220, 53, 69, 0.9);
+        }
+
         .movie-info {
             padding: 15px;
             color: #333;
-            height: 45%;
+            height: 35%;
             overflow-y: auto;
         }
 
@@ -589,6 +621,14 @@
                     </div>
                 </div>
 
+                <div class="setup-section">
+                    <h3>Не раньше какого года</h3>
+                    <div class="slider-container">
+                        <input type="range" min="1970" max="2025" value="2000" class="slider" id="yearSlider">
+                        <div class="slider-value" id="yearValue">2000</div>
+                    </div>
+                </div>
+
                 <button class="btn" id="createSessionBtn">Создать сессию</button>
             </div>
         </div>
@@ -748,6 +788,7 @@
         let selectedGenres = [];
         let selectedCountries = [];
         let movieCount = 20;
+        let minYear = 2000;
         let movies = [];
         let currentMovieIndex = 0;
         let userChoices = {};
@@ -775,12 +816,20 @@
                 countryGrid.appendChild(btn);
             });
 
-            // Setup slider
+            // Setup movie count slider
             const slider = document.getElementById('movieCountSlider');
             const valueDisplay = document.getElementById('movieCountValue');
             slider.oninput = () => {
                 movieCount = slider.value;
                 valueDisplay.textContent = movieCount;
+            };
+
+            // Setup year slider
+            const yearSlider = document.getElementById('yearSlider');
+            const yearValue = document.getElementById('yearValue');
+            yearSlider.oninput = () => {
+                minYear = yearSlider.value;
+                yearValue.textContent = minYear;
             };
         }
 
@@ -843,6 +892,7 @@
                     genres: selectedGenres,
                     countries: selectedCountries,
                     movieCount: movieCount,
+                    minYear: minYear,
                     host: true,
                     partner: false,
                     hostChoices: {},
@@ -889,6 +939,7 @@
                 selectedGenres = sessionData.genres;
                 selectedCountries = sessionData.countries || [];
                 movieCount = sessionData.movieCount;
+                minYear = sessionData.minYear || 2000;
                 isHost = false;
 
                 // Mark partner as joined
@@ -932,7 +983,7 @@
 
                     // Fetch multiple pages if needed
                     for (let page = 1; page <= Math.min(pagesNeeded, 10); page++) {
-                        let url = `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_genres=${genreParam}&language=ru-RU&sort_by=popularity.desc&page=${page}&include_adult=false&vote_average.gte=5`;
+                        let url = `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_genres=${genreParam}&language=ru-RU&sort_by=popularity.desc&page=${page}&include_adult=false&vote_average.gte=5&primary_release_date.gte=${minYear}-01-01`;
 
                         // Add country filter if selected
                         if (countryParam) {
@@ -942,29 +993,43 @@
                         const response = await fetch(url);
                         const data = await response.json();
 
-                        // Filter movies with rating >= 5
-                        const filteredResults = data.results.filter(movie => movie.vote_average >= 5);
+                        // Filter movies with rating >= 5 and year >= minYear
+                        const filteredResults = data.results.filter(movie => {
+                            const year = movie.release_date ? parseInt(movie.release_date.split('-')[0]) : 0;
+                            return movie.vote_average >= 5 && year >= minYear;
+                        });
                         allMovies.push(...filteredResults);
 
                         if (allMovies.length >= movieCount * 1.5) break; // Get extra to account for filtering
                     }
 
-                    // Fetch detailed info for each movie including credits
+                    // Fetch detailed info for each movie including credits and translations
                     const moviePromises = allMovies.slice(0, movieCount * 1.5).map(async (movie) => {
                         try {
-                            // Fetch movie details
+                            // Fetch movie details with translations
                             const detailsResponse = await fetch(
-                                `${TMDB_BASE_URL}/movie/${movie.id}?api_key=${TMDB_API_KEY}&language=ru-RU&append_to_response=credits`
+                                `${TMDB_BASE_URL}/movie/${movie.id}?api_key=${TMDB_API_KEY}&language=ru-RU&append_to_response=credits,translations`
                             );
                             const details = await detailsResponse.json();
 
-                            // Only check original language - most popular movies have Russian dubbing/subtitles available
-                            // We include all languages except rare ones
+                            // Check for Russian or English language availability
+                            const translations = details.translations?.translations || [];
+                            const hasRussian = translations.some(t => t.iso_639_1 === 'ru');
+                            const hasEnglish = translations.some(t => t.iso_639_1 === 'en');
                             const originalLanguage = details.original_language;
-                            const excludedLanguages = ['th', 'vi', 'id', 'ms', 'tl']; // Exclude Thai, Vietnamese, Indonesian, Malay, Tagalog
 
-                            if (excludedLanguages.includes(originalLanguage)) {
-                                return null; // Skip movies in excluded languages
+                            // Exclude movies that don't have Russian OR English
+                            if (!hasRussian && !hasEnglish && originalLanguage !== 'ru' && originalLanguage !== 'en') {
+                                return null;
+                            }
+
+                            // Determine which languages are available
+                            const availableLanguages = [];
+                            if (hasRussian || originalLanguage === 'ru') {
+                                availableLanguages.push('rus');
+                            }
+                            if (hasEnglish || originalLanguage === 'en') {
+                                availableLanguages.push('eng');
                             }
 
                             const director = details.credits?.crew?.find(person => person.job === 'Director');
@@ -978,7 +1043,8 @@
                                 rating: movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A',
                                 year: movie.release_date ? movie.release_date.split('-')[0] : 'N/A',
                                 director: director ? director.name : 'Неизвестен',
-                                movieGenres: movieGenres
+                                movieGenres: movieGenres,
+                                languages: availableLanguages
                             };
                         } catch (err) {
                             return null; // Skip on error
@@ -1043,9 +1109,19 @@
             card.className = 'movie-card';
             card.id = 'currentCard';
 
+            // Language badges
+            const languageBadges = movie.languages && movie.languages.length > 0
+                ? `<div class="language-badges">
+                    ${movie.languages.map(lang => `<span class="language-badge ${lang}">${lang}</span>`).join('')}
+                   </div>`
+                : '';
+
             const posterContent = movie.poster.startsWith('http')
-                ? `<img src="${movie.poster}" class="movie-poster" alt="${movie.title}">
-                   ${movie.rating !== 'N/A' ? `<div class="movie-rating">⭐ ${movie.rating}</div>` : ''}`
+                ? `<div class="movie-poster">
+                    <img src="${movie.poster}" alt="${movie.title}">
+                    ${languageBadges}
+                    ${movie.rating !== 'N/A' ? `<div class="movie-rating">⭐ ${movie.rating}</div>` : ''}
+                   </div>`
                 : `<div class="movie-poster">${movie.poster}</div>`;
 
             const genresHtml = movie.movieGenres && movie.movieGenres.length > 0
