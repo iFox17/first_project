@@ -1494,7 +1494,7 @@
             transitionTo(newState) {
                 const currentState = this.state;
 
-                if (!VALID_TRANSITIONS[currentState]?.includes(newState)) {
+                if (!VALID_TRANSITIONS[currentState] || !VALID_TRANSITIONS[currentState].includes(newState)) {
                     console.error(`[SessionManager] Invalid transition: ${currentState} -> ${newState}`);
                     this.logHealthCheck();
                     return false;
@@ -1906,7 +1906,7 @@
                     console.log('Host: Saving movies to Firebase...');
                     console.log('Host: Movies to save:', movies.length, 'movies');
                     console.log('Host: First 3 movie IDs:', movies.slice(0, 3).map(m => m.id));
-                    console.log('Host: First movie title:', movies[0]?.title);
+                    console.log('Host: First movie title:', movies[0] ? movies[0].title : 'N/A');
                     try {
                         await firebaseManager.update(`sessions/${sessionId}`, {
                             movies: movies,
@@ -2027,7 +2027,7 @@
                         movies = sessionData.movies;
                         console.log('Partner: Loaded', movies.length, 'movies from Firebase');
                         console.log('Partner: First 3 movie IDs:', movies.slice(0, 3).map(m => m.id));
-                        console.log('Partner: First movie title:', movies[0]?.title);
+                        console.log('Partner: First movie title:', movies[0] ? movies[0].title : 'N/A');
                         startSwipePhase();
                     } else {
                         // Movies not ready yet, wait for them
@@ -2056,7 +2056,7 @@
                                     movies = moviesData;
                                     console.log('Partner: Loaded', movies.length, 'movies from Firebase (listener)');
                                     console.log('Partner: First 3 movie IDs:', movies.slice(0, 3).map(m => m.id));
-                                    console.log('Partner: First movie title:', movies[0]?.title);
+                                    console.log('Partner: First movie title:', movies[0] ? movies[0].title : 'N/A');
                                     startSwipePhase();
                                 } else {
                                     console.error('Partner: Failed to load movies from Firebase');
@@ -2210,7 +2210,7 @@
                     console.log(`Fetching page ${page}...`);
                     const response = await fetchWithRetry(url);
                     const data = await response.json();
-                    console.log(`Page ${page} returned ${data.results?.length || 0} movies`);
+                    console.log(`Page ${page} returned ${data.results && data.results.length ? data.results.length : 0} movies`);
 
                     // Filter movies with rating >= 5 and year >= minYear
                     const filteredResults = data.results.filter(movie => {
@@ -2646,7 +2646,7 @@
                 console.error('showMatches() called but movies not loaded yet!');
                 console.error('Current state:', {
                     movies: movies,
-                    moviesLength: movies?.length,
+                    moviesLength: movies ? movies.length : 0,
                     userChoices: Object.keys(userChoices).length,
                     partnerChoices: Object.keys(partnerChoices).length
                 });
