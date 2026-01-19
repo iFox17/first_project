@@ -1430,6 +1430,18 @@
                 }
             }
 
+            async update(path, data) {
+                if (!database) return false;
+                try {
+                    await database.ref(path).update(data);
+                    console.log(`[Firebase] Update success: ${path}`, data);
+                    return true;
+                } catch (error) {
+                    console.error(`[Firebase] Update error: ${path}`, error);
+                    return false;
+                }
+            }
+
             async read(path) {
                 if (!database) return null;
                 try {
@@ -1779,6 +1791,11 @@
             sessionId = generateSessionId();
             isHost = true;
 
+            // Update URL with session parameter so host can refresh page
+            const newUrl = `${window.location.pathname}?session=${sessionId}`;
+            window.history.replaceState({ sessionId: sessionId }, '', newUrl);
+            console.log('Updated host URL with session:', newUrl);
+
             // Create session in Firebase first
             if (database) {
                 // Show link screen immediately
@@ -1788,6 +1805,9 @@
                 document.getElementById('sessionLink').textContent = link;
                 document.querySelector('.session-link').style.display = 'block';
                 document.querySelector('.waiting-message p').textContent = 'Загрузка фильмов...';
+
+                // Update session code display
+                updateSessionCodeDisplay();
 
                 try {
                     const success = await firebaseManager.write(`sessions/${sessionId}`, {
@@ -1944,10 +1964,9 @@
                     minYear = sessionData.minYear || 2000;
                     isHost = false;
 
-                    // Mark partner as joined
+                    // Mark partner as joined (use update to avoid overwriting host data)
                     console.log('Setting partner: true in Firebase...');
-                    sessionData.partner = true;
-                    const success = await firebaseManager.write(`sessions/${sessionId}`, sessionData);
+                    const success = await firebaseManager.update(`sessions/${sessionId}`, { partner: true });
                     if (!success) {
                         throw new Error('Failed to mark partner as joined');
                     }
