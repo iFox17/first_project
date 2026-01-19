@@ -1357,23 +1357,11 @@
             { code: 'CN', name: 'Китай' }
         ];
 
-        // App State
-        let sessionId = null;
-        let isHost = false;
-        let selectedGenres = [];
-        let selectedCountries = [];
-        let movieCount = 20;
-        let minYear = 2000;
-        let movies = [];
-        let currentMovieIndex = 0;
-        let userChoices = {};
-        let partnerChoices = {};
-        let matchedMovies = []; // Movies that both users liked
-        let selectedMovieId = null; // User's final choice
-        let partnerSelectedMovieId = null; // Partner's current choice (real-time)
-        let isConfirmed = false; // Whether user confirmed their choice
+        // ============================================
+        // ARCHITECTURE: Centralized State Management
+        // ============================================
 
-        // Session state machine to prevent race conditions
+        // Session State Machine
         const SessionState = {
             SETUP: 'setup',
             SWIPING: 'swiping',
@@ -1382,26 +1370,288 @@
             WAITING_FOR_SELECTION: 'waiting_for_selection',
             FINAL: 'final'
         };
-        let currentSessionState = SessionState.SETUP;
 
-        // Cleanup references
-        let activeEventListeners = [];
-        let activeFirebaseListeners = [];
-        let currentCardCleanup = null;
+        // Valid state transitions for safety
+        const VALID_TRANSITIONS = {
+            [SessionState.SETUP]: [SessionState.SWIPING],
+            [SessionState.SWIPING]: [SessionState.WAITING_FOR_MATCHES],
+            [SessionState.WAITING_FOR_MATCHES]: [SessionState.SELECTING, SessionState.FINAL],
+            [SessionState.SELECTING]: [SessionState.WAITING_FOR_SELECTION],
+            [SessionState.WAITING_FOR_SELECTION]: [SessionState.FINAL],
+            [SessionState.FINAL]: []
+        };
 
-        // Helper functions for Firebase listener management
-        function addFirebaseListener(ref, eventType, callback) {
-            if (database) {
+        // ============================================
+        // Firebase Manager - Centralized Firebase Operations
+        // ============================================
+        class FirebaseManager {
+            constructor() {
+                this.listeners = new Map(); // listener_id -> {ref, eventType, callback}
+                this.listenerCounter = 0;
+            }
+
+            addListener(ref, eventType, callback) {
+                if (!database) return null;
+
+                const listenerId = `listener_${this.listenerCounter++}`;
                 ref.on(eventType, callback);
-                activeFirebaseListeners.push({ ref, eventType, callback });
+                this.listeners.set(listenerId, { ref, eventType, callback });
+                console.log(`[Firebase] Listener added: ${listenerId} (total: ${this.listeners.size})`);
+                return listenerId;
+            }
+
+            removeListener(listenerId) {
+                if (!this.listeners.has(listenerId)) return false;
+
+                const { ref, eventType, callback } = this.listeners.get(listenerId);
+                ref.off(eventType, callback);
+                this.listeners.delete(listenerId);
+                console.log(`[Firebase] Listener removed: ${listenerId} (remaining: ${this.listeners.size})`);
+                return true;
+            }
+
+            removeAllListeners() {
+                console.log(`[Firebase] Removing all listeners (${this.listeners.size})`);
+                this.listeners.forEach(({ ref, eventType, callback }) => {
+                    ref.off(eventType, callback);
+                });
+                this.listeners.clear();
+            }
+
+            async write(path, data) {
+                if (!database) return false;
+                try {
+                    await database.ref(path).set(data);
+                    console.log(`[Firebase] Write success: ${path}`, data);
+                    return true;
+                } catch (error) {
+                    console.error(`[Firebase] Write error: ${path}`, error);
+                    return false;
+                }
+            }
+
+            async read(path) {
+                if (!database) return null;
+                try {
+                    const snapshot = await database.ref(path).once('value');
+                    const data = snapshot.val();
+                    console.log(`[Firebase] Read success: ${path}`, data);
+                    return data;
+                } catch (error) {
+                    console.error(`[Firebase] Read error: ${path}`, error);
+                    return null;
+                }
+            }
+
+            getHealthStatus() {
+                return {
+                    connected: !!database,
+                    activeListeners: this.listeners.size,
+                    listenerIds: Array.from(this.listeners.keys())
+                };
             }
         }
 
+        // ============================================
+        // Session Manager - Centralized State Management
+        // ============================================
+        class SessionManager {
+            constructor() {
+                this.state = SessionState.SETUP;
+                this.data = {
+                    sessionId: null,
+                    isHost: false,
+                    selectedGenres: [],
+                    selectedCountries: [],
+                    movieCount: 20,
+                    minYear: 2000,
+                    movies: [],
+                    currentMovieIndex: 0,
+                    userChoices: {},
+                    partnerChoices: {},
+                    matchedMovies: [],
+                    selectedMovieId: null,
+                    partnerSelectedMovieId: null,
+                    isConfirmed: false
+                };
+                this.eventHandlers = new Map(); // event -> [callbacks]
+                this.stateHistory = []; // For debugging
+            }
+
+            // State management with validation
+            transitionTo(newState) {
+                const currentState = this.state;
+
+                if (!VALID_TRANSITIONS[currentState]?.includes(newState)) {
+                    console.error(`[SessionManager] Invalid transition: ${currentState} -> ${newState}`);
+                    this.logHealthCheck();
+                    return false;
+                }
+
+                console.log(`[SessionManager] State transition: ${currentState} -> ${newState}`);
+                this.stateHistory.push({ from: currentState, to: newState, timestamp: Date.now() });
+                this.state = newState;
+                this.emit('stateChange', { from: currentState, to: newState });
+                return true;
+            }
+
+            // Event system for coordination
+            on(eventName, callback) {
+                if (!this.eventHandlers.has(eventName)) {
+                    this.eventHandlers.set(eventName, []);
+                }
+                this.eventHandlers.get(eventName).push(callback);
+            }
+
+            emit(eventName, data) {
+                const handlers = this.eventHandlers.get(eventName) || [];
+                handlers.forEach(callback => {
+                    try {
+                        callback(data);
+                    } catch (error) {
+                        console.error(`[SessionManager] Event handler error (${eventName}):`, error);
+                    }
+                });
+            }
+
+            // Data access
+            get(key) {
+                return this.data[key];
+            }
+
+            set(key, value) {
+                const oldValue = this.data[key];
+                this.data[key] = value;
+                console.log(`[SessionManager] Data updated: ${key}`, { old: oldValue, new: value });
+                this.emit('dataChange', { key, oldValue, newValue: value });
+            }
+
+            // Batch update for related data
+            update(updates) {
+                Object.entries(updates).forEach(([key, value]) => {
+                    this.set(key, value);
+                });
+            }
+
+            // Health check for debugging
+            logHealthCheck() {
+                console.log('[SessionManager] Health Check:', {
+                    state: this.state,
+                    sessionId: this.data.sessionId,
+                    isHost: this.data.isHost,
+                    movieCount: this.data.movies.length,
+                    currentIndex: this.data.currentMovieIndex,
+                    choicesCount: Object.keys(this.data.userChoices).length,
+                    partnerChoicesCount: Object.keys(this.data.partnerChoices).length,
+                    stateHistory: this.stateHistory.slice(-5)
+                });
+            }
+
+            // Reset session
+            reset() {
+                console.log('[SessionManager] Resetting session');
+                this.state = SessionState.SETUP;
+                this.data = {
+                    sessionId: null,
+                    isHost: false,
+                    selectedGenres: [],
+                    selectedCountries: [],
+                    movieCount: 20,
+                    minYear: 2000,
+                    movies: [],
+                    currentMovieIndex: 0,
+                    userChoices: {},
+                    partnerChoices: {},
+                    matchedMovies: [],
+                    selectedMovieId: null,
+                    partnerSelectedMovieId: null,
+                    isConfirmed: false
+                };
+                this.stateHistory = [];
+                this.emit('reset');
+            }
+        }
+
+        // ============================================
+        // Initialize Managers
+        // ============================================
+        const firebaseManager = new FirebaseManager();
+        const sessionManager = new SessionManager();
+
+        // Legacy compatibility - proxy to SessionManager
+        let currentCardCleanup = null;
+
+        // Proxy getters/setters for backward compatibility
+        Object.defineProperty(window, 'sessionId', {
+            get: () => sessionManager.get('sessionId'),
+            set: (value) => sessionManager.set('sessionId', value)
+        });
+        Object.defineProperty(window, 'isHost', {
+            get: () => sessionManager.get('isHost'),
+            set: (value) => sessionManager.set('isHost', value)
+        });
+        Object.defineProperty(window, 'selectedGenres', {
+            get: () => sessionManager.get('selectedGenres'),
+            set: (value) => sessionManager.set('selectedGenres', value)
+        });
+        Object.defineProperty(window, 'selectedCountries', {
+            get: () => sessionManager.get('selectedCountries'),
+            set: (value) => sessionManager.set('selectedCountries', value)
+        });
+        Object.defineProperty(window, 'movieCount', {
+            get: () => sessionManager.get('movieCount'),
+            set: (value) => sessionManager.set('movieCount', value)
+        });
+        Object.defineProperty(window, 'minYear', {
+            get: () => sessionManager.get('minYear'),
+            set: (value) => sessionManager.set('minYear', value)
+        });
+        Object.defineProperty(window, 'movies', {
+            get: () => sessionManager.get('movies'),
+            set: (value) => sessionManager.set('movies', value)
+        });
+        Object.defineProperty(window, 'currentMovieIndex', {
+            get: () => sessionManager.get('currentMovieIndex'),
+            set: (value) => sessionManager.set('currentMovieIndex', value)
+        });
+        Object.defineProperty(window, 'userChoices', {
+            get: () => sessionManager.get('userChoices'),
+            set: (value) => sessionManager.set('userChoices', value)
+        });
+        Object.defineProperty(window, 'partnerChoices', {
+            get: () => sessionManager.get('partnerChoices'),
+            set: (value) => sessionManager.set('partnerChoices', value)
+        });
+        Object.defineProperty(window, 'matchedMovies', {
+            get: () => sessionManager.get('matchedMovies'),
+            set: (value) => sessionManager.set('matchedMovies', value)
+        });
+        Object.defineProperty(window, 'selectedMovieId', {
+            get: () => sessionManager.get('selectedMovieId'),
+            set: (value) => sessionManager.set('selectedMovieId', value)
+        });
+        Object.defineProperty(window, 'partnerSelectedMovieId', {
+            get: () => sessionManager.get('partnerSelectedMovieId'),
+            set: (value) => sessionManager.set('partnerSelectedMovieId', value)
+        });
+        Object.defineProperty(window, 'isConfirmed', {
+            get: () => sessionManager.get('isConfirmed'),
+            set: (value) => sessionManager.set('isConfirmed', value)
+        });
+        Object.defineProperty(window, 'currentSessionState', {
+            get: () => sessionManager.state,
+            set: (value) => {
+                console.warn('[DEPRECATED] Direct state assignment. Use sessionManager.transitionTo()');
+                sessionManager.state = value;
+            }
+        });
+
+        function addFirebaseListener(ref, eventType, callback) {
+            return firebaseManager.addListener(ref, eventType, callback);
+        }
+
         function cleanupFirebaseListeners() {
-            activeFirebaseListeners.forEach(({ ref, eventType, callback }) => {
-                ref.off(eventType, callback);
-            });
-            activeFirebaseListeners = [];
+            firebaseManager.removeAllListeners();
         }
 
         function cleanupAllListeners() {
@@ -1409,8 +1659,17 @@
                 currentCardCleanup();
                 currentCardCleanup = null;
             }
-            cleanupFirebaseListeners();
+            firebaseManager.removeAllListeners();
         }
+
+        // Health monitoring - called periodically
+        setInterval(() => {
+            const fbHealth = firebaseManager.getHealthStatus();
+            if (fbHealth.activeListeners > 10) {
+                console.warn('[Health Check] Too many Firebase listeners:', fbHealth);
+                sessionManager.logHealthCheck();
+            }
+        }, 30000); // Check every 30 seconds
 
         // Helper function for fetch with retry and error handling
         async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
@@ -1531,7 +1790,7 @@
                 document.querySelector('.waiting-message p').textContent = 'Загрузка фильмов...';
 
                 try {
-                    await database.ref(`sessions/${sessionId}`).set({
+                    const success = await firebaseManager.write(`sessions/${sessionId}`, {
                         genres: selectedGenres,
                         countries: selectedCountries,
                         movieCount: movieCount,
@@ -1542,6 +1801,10 @@
                         partnerChoices: {},
                         created: Date.now()
                     });
+
+                    if (!success) {
+                        throw new Error('Failed to write session to Firebase');
+                    }
                     console.log('Session created in Firebase:', sessionId);
                 } catch (error) {
                     console.error('Error creating session in Firebase:', error);
@@ -1551,11 +1814,9 @@
                 }
 
                 // Check if partner already joined (in case they joined while we were creating session)
-                const partnerRef = database.ref(`sessions/${sessionId}/partner`);
                 const checkPartner = async () => {
                     try {
-                        const snapshot = await partnerRef.once('value');
-                        const partnerJoined = snapshot.val();
+                        const partnerJoined = await firebaseManager.read(`sessions/${sessionId}/partner`);
                         console.log('Initial partner check:', partnerJoined);
 
                         if (partnerJoined === true) {
@@ -1576,6 +1837,7 @@
                     console.log('Partner not joined yet, setting up listener...');
                     // Listen for partner joining
                     let partnerJoinedFlag = false;
+                    const partnerRef = database.ref(`sessions/${sessionId}/partner`);
                     const partnerJoinCallback = (snapshot) => {
                         const value = snapshot.val();
                         console.log('Partner listener triggered, value:', value);
@@ -1583,14 +1845,16 @@
                             partnerJoinedFlag = true;
                             console.log('Partner joined, starting swipe phase');
                             // Cleanup this specific listener since partner joined
-                            partnerRef.off('value', partnerJoinCallback);
-                            activeFirebaseListeners = activeFirebaseListeners.filter(
-                                listener => listener.callback !== partnerJoinCallback
-                            );
+                            const listenerId = sessionManager.get('partnerJoinListenerId');
+                            if (listenerId) {
+                                firebaseManager.removeListener(listenerId);
+                                sessionManager.set('partnerJoinListenerId', null);
+                            }
                             startSwipePhase();
                         }
                     };
-                    addFirebaseListener(partnerRef, 'value', partnerJoinCallback);
+                    const listenerId = firebaseManager.addListener(partnerRef, 'value', partnerJoinCallback);
+                    sessionManager.set('partnerJoinListenerId', listenerId);
                 }
             } else {
                 // Demo mode - show loading
@@ -1620,8 +1884,8 @@
                     // Check again if partner joined while we were fetching movies
                     console.log('Host: Checking if partner joined while fetching movies...');
                     try {
-                        const snapshot = await database.ref(`sessions/${sessionId}/partner`).once('value');
-                        if (snapshot.val() === true) {
+                        const partnerJoined = await firebaseManager.read(`sessions/${sessionId}/partner`);
+                        if (partnerJoined === true) {
                             console.log('Host: Partner already joined! Starting swipe phase now.');
                             startSwipePhase();
                         } else {
@@ -1651,19 +1915,17 @@
             if (database) {
                 try {
                     console.log('Attempting to join session:', sessionId);
-                    const sessionRef = database.ref(`sessions/${sessionId}`);
-                    const snapshot = await sessionRef.once('value');
+                    const sessionData = await firebaseManager.read(`sessions/${sessionId}`);
 
-                    console.log('Session snapshot exists:', snapshot.exists());
+                    console.log('Session data exists:', sessionData !== null);
 
-                    if (!snapshot.exists()) {
+                    if (!sessionData) {
                         console.error('Session not found:', sessionId);
                         alert('Сессия не найдена! Возможно, она ещё не создана или истекла.');
                         window.location.href = window.location.pathname; // Redirect to home
                         return;
                     }
 
-                    const sessionData = snapshot.val();
                     console.log('Session data:', sessionData);
 
                     // Validate session data
@@ -1684,22 +1946,27 @@
 
                     // Mark partner as joined
                     console.log('Setting partner: true in Firebase...');
-                    await sessionRef.update({ partner: true });
+                    sessionData.partner = true;
+                    const success = await firebaseManager.write(`sessions/${sessionId}`, sessionData);
+                    if (!success) {
+                        throw new Error('Failed to mark partner as joined');
+                    }
                     console.log('Successfully set partner: true');
 
                     // Verify the update
-                    const verifySnapshot = await sessionRef.once('value');
-                    const verifyData = verifySnapshot.val();
+                    const verifyData = await firebaseManager.read(`sessions/${sessionId}`);
                     console.log('Verified session data after update:', verifyData);
 
                     // Listen for host choices
-                    addFirebaseListener(
-                        database.ref(`sessions/${sessionId}/hostChoices`),
+                    const hostChoicesRef = database.ref(`sessions/${sessionId}/hostChoices`);
+                    const hostChoicesListenerId = firebaseManager.addListener(
+                        hostChoicesRef,
                         'value',
                         (snapshot) => {
                             partnerChoices = snapshot.val() || {};
                         }
                     );
+                    sessionManager.set('hostChoicesListenerId', hostChoicesListenerId);
 
                     console.log('Fetching movies as partner...');
                     await fetchMovies();
@@ -1950,7 +2217,11 @@
 
         function startSwipePhase() {
             console.log('Starting swipe phase, state:', SessionState.SWIPING);
-            currentSessionState = SessionState.SWIPING;
+            const transitioned = sessionManager.transitionTo(SessionState.SWIPING);
+            if (!transitioned) {
+                console.error('Failed to transition to SWIPING');
+                return;
+            }
             showScreen('swipeScreen');
 
             // Display session code if available
@@ -1970,8 +2241,9 @@
             // This listener will be cleaned up when we enter WAITING_FOR_MATCHES state
             if (database && sessionId) {
                 const partnerChoicesKey = isHost ? 'partnerChoices' : 'hostChoices';
-                addFirebaseListener(
-                    database.ref(`sessions/${sessionId}/${partnerChoicesKey}`),
+                const partnerChoicesRef = database.ref(`sessions/${sessionId}/${partnerChoicesKey}`);
+                const listenerId = firebaseManager.addListener(
+                    partnerChoicesRef,
                     'value',
                     (snapshot) => {
                         const choices = snapshot.val() || {};
@@ -1983,6 +2255,7 @@
                         }
                     }
                 );
+                sessionManager.set('partnerChoicesSwipeListenerId', listenerId);
             }
 
             renderCurrentCard();
@@ -2117,19 +2390,16 @@
             };
         }
 
-        function swipe(choice) {
+        async function swipe(choice) {
             const movie = movies[currentMovieIndex];
             userChoices[movie.id] = choice === 'like';
 
             // Save to Firebase and wait for completion
             const savePromise = (database && sessionId)
-                ? new Promise((resolve) => {
+                ? (async () => {
                     const choicesKey = isHost ? 'hostChoices' : 'partnerChoices';
-                    database.ref(`sessions/${sessionId}/${choicesKey}/${movie.id}`)
-                        .set(choice === 'like')
-                        .then(() => resolve())
-                        .catch(() => resolve()); // Resolve anyway to not block UI
-                  })
+                    await firebaseManager.write(`sessions/${sessionId}/${choicesKey}/${movie.id}`, choice === 'like');
+                  })()
                 : Promise.resolve();
 
             const card = document.getElementById('currentCard');
@@ -2170,7 +2440,11 @@
             }
 
             console.log('checkMatches() - transitioning to WAITING_FOR_MATCHES');
-            currentSessionState = SessionState.WAITING_FOR_MATCHES;
+            const transitioned = sessionManager.transitionTo(SessionState.WAITING_FOR_MATCHES);
+            if (!transitioned) {
+                console.error('Failed to transition to WAITING_FOR_MATCHES');
+                return;
+            }
 
             // Clean up all listeners from swipe phase
             cleanupAllListeners();
@@ -2178,7 +2452,7 @@
             // Mark ourselves as finished in Firebase
             if (database && sessionId) {
                 const finishedKey = isHost ? 'hostFinished' : 'partnerFinished';
-                await database.ref(`sessions/${sessionId}/${finishedKey}`).set(true);
+                await firebaseManager.write(`sessions/${sessionId}/${finishedKey}`, true);
                 console.log('Marked as finished in Firebase');
             }
 
@@ -2189,18 +2463,16 @@
 
                 const partnerChoicesKey = isHost ? 'partnerChoices' : 'hostChoices';
                 const partnerFinishedKey = isHost ? 'partnerFinished' : 'hostFinished';
-                const partnerRef = database.ref(`sessions/${sessionId}/${partnerChoicesKey}`);
-                const partnerFinishedRef = database.ref(`sessions/${sessionId}/${partnerFinishedKey}`);
 
                 // First, check current state (partner might have already finished)
                 try {
-                    const [choicesSnapshot, finishedSnapshot] = await Promise.all([
-                        partnerRef.once('value'),
-                        partnerFinishedRef.once('value')
+                    const [choices, finished] = await Promise.all([
+                        firebaseManager.read(`sessions/${sessionId}/${partnerChoicesKey}`),
+                        firebaseManager.read(`sessions/${sessionId}/${partnerFinishedKey}`)
                     ]);
 
-                    partnerChoices = choicesSnapshot.val() || {};
-                    const partnerFinished = finishedSnapshot.val();
+                    partnerChoices = choices || {};
+                    const partnerFinished = finished;
 
                     // If partner already finished, show matches immediately
                     if (partnerFinished === true || Object.keys(partnerChoices).length >= movies.length) {
@@ -2214,33 +2486,37 @@
 
                 // Partner hasn't finished yet, set up listener for finished flag
                 let matchesShown = false;
+                const partnerFinishedRef = database.ref(`sessions/${sessionId}/${partnerFinishedKey}`);
                 const checkPartnerFinishedCallback = (snapshot) => {
                     const partnerFinished = snapshot.val();
                     if (partnerFinished === true && !matchesShown) {
                         matchesShown = true;
-                        partnerFinishedRef.off('value', checkPartnerFinishedCallback);
-                        activeFirebaseListeners = activeFirebaseListeners.filter(
-                            listener => listener.callback !== checkPartnerFinishedCallback
-                        );
+                        const listenerId = sessionManager.get('partnerFinishedListenerId');
+                        if (listenerId) {
+                            firebaseManager.removeListener(listenerId);
+                            sessionManager.set('partnerFinishedListenerId', null);
+                        }
                         console.log('Partner finished flag detected, loading choices and showing matches');
                         // Load partner choices and show matches
-                        partnerRef.once('value').then(choicesSnapshot => {
-                            partnerChoices = choicesSnapshot.val() || {};
+                        firebaseManager.read(`sessions/${sessionId}/${partnerChoicesKey}`).then(choices => {
+                            partnerChoices = choices || {};
                             showMatches();
                         });
                     }
                 };
 
-                addFirebaseListener(partnerFinishedRef, 'value', checkPartnerFinishedCallback);
+                const listenerId = firebaseManager.addListener(partnerFinishedRef, 'value', checkPartnerFinishedCallback);
+                sessionManager.set('partnerFinishedListenerId', listenerId);
 
                 // Add timeout after 5 minutes
                 setTimeout(() => {
                     if (!matchesShown) {
                         matchesShown = true;
-                        partnerFinishedRef.off('value', checkPartnerFinishedCallback);
-                        activeFirebaseListeners = activeFirebaseListeners.filter(
-                            listener => listener.callback !== checkPartnerFinishedCallback
-                        );
+                        const listenerId = sessionManager.get('partnerFinishedListenerId');
+                        if (listenerId) {
+                            firebaseManager.removeListener(listenerId);
+                            sessionManager.set('partnerFinishedListenerId', null);
+                        }
                         alert('Время ожидания партнера истекло. Попробуйте создать новую сессию.');
                         startOver();
                     }
@@ -2256,7 +2532,11 @@
 
         function showMatches() {
             console.log('showMatches() - transitioning to SELECTING');
-            currentSessionState = SessionState.SELECTING;
+            const transitioned = sessionManager.transitionTo(SessionState.SELECTING);
+            if (!transitioned) {
+                console.error('Failed to transition to SELECTING');
+                return;
+            }
 
             const matches = movies.filter(movie =>
                 userChoices[movie.id] === true && partnerChoices[movie.id] === true
@@ -2281,12 +2561,13 @@
                 const partnerSelectionKey = isHost ? 'partnerCurrentSelection' : 'hostCurrentSelection';
                 const partnerSelectionRef = database.ref(`sessions/${sessionId}/${partnerSelectionKey}`);
 
-                addFirebaseListener(partnerSelectionRef, 'value', (snapshot) => {
+                const listenerId = firebaseManager.addListener(partnerSelectionRef, 'value', (snapshot) => {
                     const newPartnerSelection = snapshot.val();
                     console.log('Partner selection changed:', newPartnerSelection);
                     partnerSelectedMovieId = newPartnerSelection;
                     renderMatchesGrid(); // Re-render to show partner's choice
                 });
+                sessionManager.set('partnerSelectionListenerId', listenerId);
             }
 
             showScreen('resultsScreen');
@@ -2360,12 +2641,13 @@
             // Immediately send selection to Firebase (real-time update)
             if (database && sessionId) {
                 const selectionKey = isHost ? 'hostCurrentSelection' : 'partnerCurrentSelection';
-                database.ref(`sessions/${sessionId}/${selectionKey}`).set(selectedMovieId)
-                    .then(() => {
-                        console.log('Selection updated in Firebase:', selectedMovieId);
-                    })
-                    .catch(error => {
-                        console.error('Error updating selection:', error);
+                firebaseManager.write(`sessions/${sessionId}/${selectionKey}`, selectedMovieId)
+                    .then((success) => {
+                        if (success) {
+                            console.log('Selection updated in Firebase:', selectedMovieId);
+                        } else {
+                            console.error('Error updating selection');
+                        }
                     });
             }
 
@@ -2399,7 +2681,11 @@
             }
 
             console.log('waitForPartnerConfirmation() - transitioning to WAITING_FOR_SELECTION');
-            currentSessionState = SessionState.WAITING_FOR_SELECTION;
+            const transitioned = sessionManager.transitionTo(SessionState.WAITING_FOR_SELECTION);
+            if (!transitioned) {
+                console.error('Failed to transition to WAITING_FOR_SELECTION');
+                return;
+            }
 
             const movie = matchedMovies.find(m => m.id === selectedMovieId);
             if (!movie) {
@@ -2410,16 +2696,14 @@
             // Send confirmation to Firebase
             if (database && sessionId) {
                 const confirmationKey = isHost ? 'hostConfirmed' : 'partnerConfirmed';
-                await database.ref(`sessions/${sessionId}/${confirmationKey}`).set(true);
+                await firebaseManager.write(`sessions/${sessionId}/${confirmationKey}`, true);
                 console.log('Sent confirmation to Firebase');
 
                 // Check if partner already confirmed
                 const partnerConfirmationKey = isHost ? 'partnerConfirmed' : 'hostConfirmed';
-                const partnerConfirmationRef = database.ref(`sessions/${sessionId}/${partnerConfirmationKey}`);
 
                 try {
-                    const snapshot = await partnerConfirmationRef.once('value');
-                    const partnerConfirmed = snapshot.val();
+                    const partnerConfirmed = await firebaseManager.read(`sessions/${sessionId}/${partnerConfirmationKey}`);
 
                     // If partner already confirmed, show final movie immediately
                     if (partnerConfirmed === true) {
@@ -2433,29 +2717,33 @@
 
                 // Partner hasn't confirmed yet, wait for them
                 let confirmationReceived = false;
+                const partnerConfirmationRef = database.ref(`sessions/${sessionId}/${partnerConfirmationKey}`);
                 const partnerConfirmationCallback = (snapshot) => {
                     const confirmed = snapshot.val();
                     if (confirmed === true && !confirmationReceived) {
                         confirmationReceived = true;
-                        partnerConfirmationRef.off('value', partnerConfirmationCallback);
-                        activeFirebaseListeners = activeFirebaseListeners.filter(
-                            listener => listener.callback !== partnerConfirmationCallback
-                        );
+                        const listenerId = sessionManager.get('partnerConfirmationListenerId');
+                        if (listenerId) {
+                            firebaseManager.removeListener(listenerId);
+                            sessionManager.set('partnerConfirmationListenerId', null);
+                        }
                         console.log('Partner confirmed! Showing final movie.');
                         showFinalChoice(movie);
                     }
                 };
 
-                addFirebaseListener(partnerConfirmationRef, 'value', partnerConfirmationCallback);
+                const listenerId = firebaseManager.addListener(partnerConfirmationRef, 'value', partnerConfirmationCallback);
+                sessionManager.set('partnerConfirmationListenerId', listenerId);
 
                 // Add timeout
                 setTimeout(() => {
                     if (!confirmationReceived) {
                         confirmationReceived = true;
-                        partnerConfirmationRef.off('value', partnerConfirmationCallback);
-                        activeFirebaseListeners = activeFirebaseListeners.filter(
-                            listener => listener.callback !== partnerConfirmationCallback
-                        );
+                        const listenerId = sessionManager.get('partnerConfirmationListenerId');
+                        if (listenerId) {
+                            firebaseManager.removeListener(listenerId);
+                            sessionManager.set('partnerConfirmationListenerId', null);
+                        }
                         alert('Время ожидания подтверждения партнера истекло.');
                         showFinalChoice(movie);
                     }
@@ -2468,7 +2756,7 @@
 
         function showFinalChoice(movie) {
             console.log('showFinalChoice() - transitioning to FINAL');
-            currentSessionState = SessionState.FINAL;
+            sessionManager.transitionTo(SessionState.FINAL);
 
             // Clean up all remaining listeners - we're done!
             cleanupAllListeners();
