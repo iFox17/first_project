@@ -1788,6 +1788,11 @@
                 return;
             }
 
+            // Clean up any previous session data
+            console.log('Creating new session - cleaning up old data...');
+            firebaseManager.removeAllListeners();
+            sessionManager.reset();
+
             sessionId = generateSessionId();
             isHost = true;
 
@@ -1941,6 +1946,11 @@
         }
 
         async function joinSession(sessionId) {
+            // Clean up any previous session data
+            console.log('Joining session - cleaning up old data...');
+            firebaseManager.removeAllListeners();
+            sessionManager.reset();
+
             // Show loading
             showScreen('linkScreen');
             document.querySelector('.session-info h2').textContent = 'Подключение к сессии...';
@@ -2615,6 +2625,19 @@
 
         function showMatches() {
             console.log('showMatches() - transitioning to SELECTING');
+
+            // Guard: ensure movies are loaded
+            if (!movies || movies.length === 0) {
+                console.error('showMatches() called but movies not loaded yet!');
+                console.error('Current state:', {
+                    movies: movies,
+                    moviesLength: movies?.length,
+                    userChoices: Object.keys(userChoices).length,
+                    partnerChoices: Object.keys(partnerChoices).length
+                });
+                return; // Don't show error, just return - movies might still be loading
+            }
+
             const transitioned = sessionManager.transitionTo(SessionState.SELECTING);
             if (!transitioned) {
                 console.error('Failed to transition to SELECTING');
