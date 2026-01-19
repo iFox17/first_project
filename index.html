@@ -3466,6 +3466,8 @@
             currentSessionState = sessionData.currentState || SessionState.SETUP;
             selectedGenres = sessionData.selectedGenres || [];
             selectedCountries = sessionData.selectedCountries || [];
+            selectedLanguages = sessionData.selectedLanguages || ['rus', 'eng'];
+            minRating = sessionData.minRating || 7.0;
             minYear = sessionData.minYear || 1970;
             movieCount = sessionData.movieCount || 20;
             userChoices = sessionData.userChoices || {};
