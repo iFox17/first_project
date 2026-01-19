@@ -1716,8 +1716,17 @@
             }
         }
 
-        async function fetchMovies() {
-            console.log('fetchMovies() started with', movieCount, 'movies requested');
+        async function fetchMovies(retryCount = 0, maxRetries = 3) {
+            console.log(`fetchMovies() attempt ${retryCount + 1}/${maxRetries + 1} with ${movieCount} movies requested`);
+
+            // Update loading message with retry info
+            if (document.querySelector('.waiting-message p')) {
+                if (retryCount > 0) {
+                    document.querySelector('.waiting-message p').textContent = `Загрузка фильмов... (попытка ${retryCount + 1}/${maxRetries + 1})`;
+                } else {
+                    document.querySelector('.waiting-message p').textContent = 'Загрузка фильмов...';
+                }
+            }
 
             // Demo movies for testing without API
             const demoMovies = [
@@ -1778,136 +1787,162 @@
                 }
             ];
 
-            movies = [];
-            for (let i = 0; i < movieCount; i++) {
-                movies.push(demoMovies[i % demoMovies.length]);
-            }
-            console.log('Demo movies loaded as fallback:', movies.length);
-
-            // If TMDB API is configured, fetch real movies
-            if (TMDB_API_KEY !== 'YOUR_TMDB_API_KEY') {
-                console.log('TMDB API key found, fetching real movies...');
-                try {
-                    const genreParam = selectedGenres.join(',');
-                    const countryParam = selectedCountries.length > 0 ? selectedCountries.join('|') : '';
-                    const pagesNeeded = Math.ceil(movieCount / 20);
-                    const allMovies = [];
-
-                    // Randomize sorting method for variety
-                    const sortOptions = [
-                        'popularity.desc',
-                        'vote_average.desc',
-                        'vote_count.desc',
-                        'primary_release_date.desc'
-                    ];
-                    const randomSort = sortOptions[Math.floor(Math.random() * sortOptions.length)];
-                    console.log('Using random sort:', randomSort);
-
-                    // Start from a random page (1-10) for more variety
-                    const startPage = Math.floor(Math.random() * 10) + 1;
-                    console.log('Starting from random page:', startPage);
-
-                    // Fetch multiple pages if needed
-                    for (let i = 0; i < Math.min(pagesNeeded, 10); i++) {
-                        const page = startPage + i;
-                        let url = `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_genres=${genreParam}&language=ru-RU&sort_by=${randomSort}&page=${page}&include_adult=false&vote_average.gte=5&primary_release_date.gte=${minYear}-01-01`;
-
-                        // Add country filter if selected
-                        if (countryParam) {
-                            url += `&with_origin_country=${countryParam}`;
-                        }
-
-                        console.log(`Fetching page ${page}...`);
-                        const response = await fetchWithRetry(url);
-                        const data = await response.json();
-                        console.log(`Page ${page} returned ${data.results?.length || 0} movies`);
-
-                        // Filter movies with rating >= 5 and year >= minYear
-                        const filteredResults = data.results.filter(movie => {
-                            const year = movie.release_date ? parseInt(movie.release_date.split('-')[0]) : 0;
-                            return movie.vote_average >= 5 && year >= minYear;
-                        });
-                        console.log(`After filtering: ${filteredResults.length} movies`);
-                        allMovies.push(...filteredResults);
-
-                        if (allMovies.length >= movieCount * 1.5) break; // Get extra to account for filtering
-                    }
-                    console.log(`Total movies fetched: ${allMovies.length}`);
-
-                    // Fetch detailed info for each movie including credits and translations
-                    const moviePromises = allMovies.slice(0, movieCount * 1.5).map(async (movie) => {
-                        try {
-                            // Fetch movie details with translations
-                            const detailsResponse = await fetchWithRetry(
-                                `${TMDB_BASE_URL}/movie/${movie.id}?api_key=${TMDB_API_KEY}&language=ru-RU&append_to_response=credits,translations`
-                            );
-                            const details = await detailsResponse.json();
-
-                            // Check for Russian or English language availability
-                            const translations = details.translations?.translations || [];
-                            const hasRussian = translations.some(t => t.iso_639_1 === 'ru');
-                            const hasEnglish = translations.some(t => t.iso_639_1 === 'en');
-                            const originalLanguage = details.original_language;
-
-                            // Exclude movies that don't have Russian OR English
-                            if (!hasRussian && !hasEnglish && originalLanguage !== 'ru' && originalLanguage !== 'en') {
-                                return null;
-                            }
-
-                            // Determine which languages are available
-                            const availableLanguages = [];
-                            if (hasRussian || originalLanguage === 'ru') {
-                                availableLanguages.push('rus');
-                            }
-                            if (hasEnglish || originalLanguage === 'en') {
-                                availableLanguages.push('eng');
-                            }
-
-                            const director = details.credits?.crew?.find(person => person.job === 'Director');
-                            const movieGenres = details.genres?.map(g => g.name) || [];
-
-                            return {
-                                id: movie.id,
-                                title: movie.title,
-                                overview: movie.overview || 'Описание отсутствует',
-                                poster: movie.poster_path ? `${TMDB_IMAGE_BASE}${movie.poster_path}` : '🎬',
-                                rating: movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A',
-                                year: movie.release_date ? movie.release_date.split('-')[0] : 'N/A',
-                                director: director ? director.name : 'Неизвестен',
-                                movieGenres: movieGenres,
-                                languages: availableLanguages
-                            };
-                        } catch (err) {
-                            return null; // Skip on error
-                        }
-                    });
-
-                    console.log(`Fetching detailed info for ${moviePromises.length} movies...`);
-                    const allMovieDetails = await Promise.all(moviePromises);
-
-                    // Filter out null values
-                    const filteredMovies = allMovieDetails.filter(movie => movie !== null);
-
-                    console.log(`Loaded ${filteredMovies.length} movies after language filtering`);
-
-                    if (filteredMovies.length === 0) {
-                        console.warn('No movies found matching criteria. Using demo movies.');
-                        showToast('Не удалось загрузить фильмы из TMDB. Используются демо-фильмы.', 'error', 5000);
-                        // Keep demo movies as fallback
-                    } else {
-                        // Shuffle the array for randomness
-                        const shuffled = filteredMovies.sort(() => Math.random() - 0.5);
-                        movies = shuffled.slice(0, movieCount);
-                        console.log(`Successfully loaded ${movies.length} real movies from TMDB (shuffled)`);
-                    }
-                } catch (error) {
-                    console.error('Error fetching movies:', error);
-                    console.log('Using demo movies as fallback');
-                    showToast('Ошибка загрузки фильмов: ' + error.message, 'error', 5000);
-                    // Demo movies already loaded above, so we keep them
-                }
-            } else {
+            // If TMDB API key not configured, use demo movies
+            if (TMDB_API_KEY === 'YOUR_TMDB_API_KEY') {
                 console.log('TMDB API key not configured, using demo movies only');
+                movies = [];
+                for (let i = 0; i < movieCount; i++) {
+                    movies.push(demoMovies[i % demoMovies.length]);
+                }
+                console.log('Demo movies loaded:', movies.length);
+                return;
+            }
+
+            // Try to fetch real movies from TMDB
+            console.log('TMDB API key found, fetching real movies...');
+            try {
+                const genreParam = selectedGenres.join(',');
+                const countryParam = selectedCountries.length > 0 ? selectedCountries.join('|') : '';
+                const pagesNeeded = Math.ceil(movieCount / 20);
+                const allMovies = [];
+
+                // Randomize sorting method for variety
+                const sortOptions = [
+                    'popularity.desc',
+                    'vote_average.desc',
+                    'vote_count.desc',
+                    'primary_release_date.desc'
+                ];
+                const randomSort = sortOptions[Math.floor(Math.random() * sortOptions.length)];
+                console.log('Using random sort:', randomSort);
+
+                // Start from a random page (1-10) for more variety
+                const startPage = Math.floor(Math.random() * 10) + 1;
+                console.log('Starting from random page:', startPage);
+
+                // Fetch multiple pages if needed
+                for (let i = 0; i < Math.min(pagesNeeded, 10); i++) {
+                    const page = startPage + i;
+                    let url = `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_genres=${genreParam}&language=ru-RU&sort_by=${randomSort}&page=${page}&include_adult=false&vote_average.gte=5&primary_release_date.gte=${minYear}-01-01`;
+
+                    // Add country filter if selected
+                    if (countryParam) {
+                        url += `&with_origin_country=${countryParam}`;
+                    }
+
+                    console.log(`Fetching page ${page}...`);
+                    const response = await fetchWithRetry(url);
+                    const data = await response.json();
+                    console.log(`Page ${page} returned ${data.results?.length || 0} movies`);
+
+                    // Filter movies with rating >= 5 and year >= minYear
+                    const filteredResults = data.results.filter(movie => {
+                        const year = movie.release_date ? parseInt(movie.release_date.split('-')[0]) : 0;
+                        return movie.vote_average >= 5 && year >= minYear;
+                    });
+                    console.log(`After filtering: ${filteredResults.length} movies`);
+                    allMovies.push(...filteredResults);
+
+                    if (allMovies.length >= movieCount * 1.5) break; // Get extra to account for filtering
+                }
+                console.log(`Total movies fetched: ${allMovies.length}`);
+
+                // Fetch detailed info for each movie including credits and translations
+                const moviePromises = allMovies.slice(0, movieCount * 1.5).map(async (movie) => {
+                    try {
+                        // Fetch movie details with translations
+                        const detailsResponse = await fetchWithRetry(
+                            `${TMDB_BASE_URL}/movie/${movie.id}?api_key=${TMDB_API_KEY}&language=ru-RU&append_to_response=credits,translations`
+                        );
+                        const details = await detailsResponse.json();
+
+                        // Check for Russian or English language availability
+                        const translations = details.translations?.translations || [];
+                        const hasRussian = translations.some(t => t.iso_639_1 === 'ru');
+                        const hasEnglish = translations.some(t => t.iso_639_1 === 'en');
+                        const originalLanguage = details.original_language;
+
+                        // Exclude movies that don't have Russian OR English
+                        if (!hasRussian && !hasEnglish && originalLanguage !== 'ru' && originalLanguage !== 'en') {
+                            return null;
+                        }
+
+                        // Determine which languages are available
+                        const availableLanguages = [];
+                        if (hasRussian || originalLanguage === 'ru') {
+                            availableLanguages.push('rus');
+                        }
+                        if (hasEnglish || originalLanguage === 'en') {
+                            availableLanguages.push('eng');
+                        }
+
+                        const director = details.credits?.crew?.find(person => person.job === 'Director');
+                        const movieGenres = details.genres?.map(g => g.name) || [];
+
+                        return {
+                            id: movie.id,
+                            title: movie.title,
+                            overview: movie.overview || 'Описание отсутствует',
+                            poster: movie.poster_path ? `${TMDB_IMAGE_BASE}${movie.poster_path}` : '🎬',
+                            rating: movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A',
+                            year: movie.release_date ? movie.release_date.split('-')[0] : 'N/A',
+                            director: director ? director.name : 'Неизвестен',
+                            movieGenres: movieGenres,
+                            languages: availableLanguages
+                        };
+                    } catch (err) {
+                        return null; // Skip on error
+                    }
+                });
+
+                console.log(`Fetching detailed info for ${moviePromises.length} movies...`);
+                const allMovieDetails = await Promise.all(moviePromises);
+
+                // Filter out null values
+                const filteredMovies = allMovieDetails.filter(movie => movie !== null);
+
+                console.log(`Loaded ${filteredMovies.length} movies after language filtering`);
+
+                if (filteredMovies.length === 0) {
+                    // No movies found - retry if we haven't exceeded max retries
+                    if (retryCount < maxRetries) {
+                        console.warn(`No movies found. Retrying... (${retryCount + 1}/${maxRetries})`);
+                        showToast(`Загрузка фильмов не удалась. Повтор ${retryCount + 2}/${maxRetries + 1}...`, 'error', 3000);
+                        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
+                        return await fetchMovies(retryCount + 1, maxRetries);
+                    } else {
+                        console.error('Max retries exceeded. Using demo movies.');
+                        showToast('Не удалось загрузить фильмы из TMDB после нескольких попыток.', 'error', 5000);
+                        // Load demo movies as last resort
+                        movies = [];
+                        for (let i = 0; i < movieCount; i++) {
+                            movies.push(demoMovies[i % demoMovies.length]);
+                        }
+                    }
+                } else {
+                    // Shuffle the array for randomness
+                    const shuffled = filteredMovies.sort(() => Math.random() - 0.5);
+                    movies = shuffled.slice(0, movieCount);
+                    console.log(`Successfully loaded ${movies.length} real movies from TMDB (shuffled)`);
+                }
+            } catch (error) {
+                console.error('Error fetching movies:', error);
+
+                // Retry if we haven't exceeded max retries
+                if (retryCount < maxRetries) {
+                    console.log(`Retrying after error... (${retryCount + 1}/${maxRetries})`);
+                    showToast(`Ошибка загрузки: ${error.message}. Повтор ${retryCount + 2}/${maxRetries + 1}...`, 'error', 3000);
+                    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
+                    return await fetchMovies(retryCount + 1, maxRetries);
+                } else {
+                    console.error('Max retries exceeded after errors. Using demo movies.');
+                    showToast('Не удалось загрузить фильмы после нескольких попыток.', 'error', 5000);
+                    // Load demo movies as last resort
+                    movies = [];
+                    for (let i = 0; i < movieCount; i++) {
+                        movies.push(demoMovies[i % demoMovies.length]);
+                    }
+                }
             }
 
             console.log('fetchMovies() completed. Total movies:', movies.length);
