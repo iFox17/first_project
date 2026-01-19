@@ -1372,7 +1372,7 @@
                 .replace(/'/g, "&#039;");
         }
 
-        // Validate Firebase session data
+        // Validate and normalize Firebase session data
         function validateSessionData(sessionData) {
             console.log('[validateSessionData] Validating session data:', JSON.stringify(sessionData, null, 2));
 
@@ -1380,17 +1380,39 @@
                 throw new Error('Неверный формат данных сессии');
             }
 
-            // Validate genres
+            // Validate and normalize genres
             console.log('[validateSessionData] Checking genres:', sessionData.genres, 'isArray:', Array.isArray(sessionData.genres));
+
+            // Try to fix if genres is an object that looks like an array
+            if (!Array.isArray(sessionData.genres) && typeof sessionData.genres === 'object') {
+                console.warn('[validateSessionData] genres is object, attempting to convert to array');
+                const keys = Object.keys(sessionData.genres);
+                if (keys.every(key => /^\d+$/.test(key))) {
+                    sessionData.genres = keys.map(k => sessionData.genres[k]);
+                    console.log('[validateSessionData] Converted genres to array:', sessionData.genres);
+                }
+            }
+
             if (!Array.isArray(sessionData.genres) || sessionData.genres.length === 0) {
+                console.error('[validateSessionData] genres validation failed:', {
+                    value: sessionData.genres,
+                    isArray: Array.isArray(sessionData.genres),
+                    length: sessionData.genres?.length,
+                    type: typeof sessionData.genres
+                });
                 throw new Error('Отсутствуют или неверные жанры');
             }
 
             // Validate all genre IDs are numbers
             console.log('[validateSessionData] Checking genre types:', sessionData.genres.map(id => typeof id));
-            if (!sessionData.genres.every(id => typeof id === 'number')) {
+            const allNumbers = sessionData.genres.every(id => typeof id === 'number');
+            if (!allNumbers) {
+                console.error('[validateSessionData] Not all genre IDs are numbers:',
+                    sessionData.genres.map(id => ({ value: id, type: typeof id })));
                 throw new Error('Неверный формат ID жанров');
             }
+
+            console.log('[validateSessionData] Genres validation passed ✓');
 
             // Validate countries (optional)
             if (sessionData.countries !== undefined && !Array.isArray(sessionData.countries)) {
@@ -1753,13 +1775,53 @@
                 if (!database) return null;
                 try {
                     const snapshot = await database.ref(path).once('value');
-                    const data = snapshot.val();
+                    let data = snapshot.val();
+
+                    // Firebase can convert arrays to objects - normalize them back
+                    if (data && typeof data === 'object') {
+                        data = this._normalizeFirebaseData(data);
+                    }
+
                     console.log(`[Firebase] Read success: ${path}`, data);
                     return data;
                 } catch (error) {
                     console.error(`[Firebase] Read error: ${path}`, error);
                     return null;
                 }
+            }
+
+            _normalizeFirebaseData(data) {
+                // Recursively convert Firebase objects that look like arrays back to arrays
+                if (Array.isArray(data)) {
+                    return data.map(item => this._normalizeFirebaseData(item));
+                }
+
+                if (data && typeof data === 'object') {
+                    // Check if object has only numeric keys starting from 0 (Firebase array pattern)
+                    const keys = Object.keys(data);
+                    const isArrayLike = keys.length > 0 &&
+                                       keys.every(key => /^\d+$/.test(key)) &&
+                                       keys.map(k => parseInt(k)).sort((a, b) => a - b)
+                                           .every((val, idx) => val === idx);
+
+                    if (isArrayLike) {
+                        // Convert to array
+                        const arr = [];
+                        keys.forEach(key => {
+                            arr[parseInt(key)] = this._normalizeFirebaseData(data[key]);
+                        });
+                        return arr;
+                    }
+
+                    // Regular object - recurse into properties
+                    const normalized = {};
+                    Object.keys(data).forEach(key => {
+                        normalized[key] = this._normalizeFirebaseData(data[key]);
+                    });
+                    return normalized;
+                }
+
+                return data;
             }
 
             getHealthStatus() {
@@ -2134,10 +2196,37 @@
                 return;
             }
 
+            // IMPORTANT: Save user selections BEFORE reset
+            const userSelections = {
+                genres: [...selectedGenres],
+                countries: [...selectedCountries],
+                languages: [...selectedLanguages],
+                minRating: minRating,
+                movieCount: movieCount,
+                minYear: minYear
+            };
+            console.log('[createSession] Saved user selections before reset:', userSelections);
+
             // Clean up any previous session data
-            console.log('Creating new session - cleaning up old data...');
+            console.log('[createSession] Cleaning up old data...');
             firebaseManager.removeAllListeners();
             sessionManager.reset();
+
+            // Restore user selections after reset
+            selectedGenres = userSelections.genres;
+            selectedCountries = userSelections.countries;
+            selectedLanguages = userSelections.languages;
+            minRating = userSelections.minRating;
+            movieCount = userSelections.movieCount;
+            minYear = userSelections.minYear;
+            console.log('[createSession] Restored user selections after reset:', {
+                selectedGenres,
+                selectedCountries,
+                selectedLanguages,
+                minRating,
+                movieCount,
+                minYear
+            });
 
             sessionId = generateSessionId();
             isHost = true;

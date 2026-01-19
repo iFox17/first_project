@@ -1,0 +1,1559 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MovieMatch - Выбираем фильм вдвоем</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            text-align: center;
+            padding: 30px 0;
+        }
+
+        .logo {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        .screen {
+            display: none;
+            flex-direction: column;
+            flex: 1;
+        }
+
+        .screen.active {
+            display: flex;
+        }
+
+        /* Setup Screen */
+        .setup-container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            margin-top: 20px;
+        }
+
+        .setup-section {
+            margin-bottom: 30px;
+        }
+
+        .setup-section h3 {
+            font-size: 18px;
+            margin-bottom: 15px;
+            opacity: 0.9;
+        }
+
+        .slider-container {
+            margin-bottom: 10px;
+        }
+
+        .slider {
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #fff;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .slider::-moz-range-thumb {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #fff;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            border: none;
+        }
+
+        .slider-value {
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .genre-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+
+        .genre-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid transparent;
+            color: #fff;
+            padding: 15px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .genre-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .genre-btn.selected {
+            background: rgba(255, 255, 255, 0.9);
+            color: #667eea;
+            border-color: #fff;
+            font-weight: bold;
+        }
+
+        .btn {
+            width: 100%;
+            background: #fff;
+            color: #667eea;
+            border: none;
+            padding: 18px;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 20px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Swipe Screen */
+        .swipe-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+            padding: 20px 0;
+        }
+
+        .swipe-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+            gap: 15px;
+        }
+
+        .selected-genres {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px 15px;
+            border-radius: 10px;
+            font-size: 13px;
+        }
+
+        .selected-genres strong {
+            display: block;
+            margin-bottom: 5px;
+            opacity: 0.8;
+        }
+
+        .genre-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .genre-tag {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 3px 8px;
+            border-radius: 5px;
+            font-size: 11px;
+        }
+
+        .movies-counter {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px 15px;
+            border-radius: 10px;
+            text-align: center;
+            min-width: 100px;
+        }
+
+        .counter-value {
+            font-size: 24px;
+            font-weight: bold;
+            display: block;
+        }
+
+        .counter-label {
+            font-size: 11px;
+            opacity: 0.8;
+        }
+
+        .partner-status {
+            background: rgba(46, 213, 115, 0.2);
+            border: 1px solid rgba(46, 213, 115, 0.5);
+            padding: 10px 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 14px;
+            display: none;
+        }
+
+        .partner-status.show {
+            display: block;
+        }
+
+        .progress-bar {
+            background: rgba(255, 255, 255, 0.2);
+            height: 8px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #fff;
+            border-radius: 10px;
+            transition: width 0.3s;
+        }
+
+        .card-stack {
+            position: relative;
+            width: 100%;
+            height: 500px;
+            margin-bottom: 30px;
+        }
+
+        .movie-card {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: #fff;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+            cursor: grab;
+            transition: transform 0.3s;
+        }
+
+        .movie-card:active {
+            cursor: grabbing;
+        }
+
+        .movie-card.swiping {
+            transition: none;
+        }
+
+        .movie-poster {
+            width: 100%;
+            height: 65%;
+            object-fit: cover;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 100px;
+            position: relative;
+        }
+
+        .movie-poster img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .movie-rating {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #ffd700;
+            padding: 5px 10px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .language-badges {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            display: flex;
+            gap: 5px;
+        }
+
+        .language-badge {
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 5px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .language-badge.rus {
+            background: rgba(0, 123, 255, 0.9);
+        }
+
+        .language-badge.eng {
+            background: rgba(220, 53, 69, 0.9);
+        }
+
+        .movie-info {
+            padding: 15px;
+            color: #333;
+            height: 35%;
+            overflow-y: auto;
+        }
+
+        .movie-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            line-height: 1.2;
+        }
+
+        .movie-meta {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 8px;
+            font-size: 12px;
+            color: #888;
+            flex-wrap: wrap;
+        }
+
+        .movie-meta span {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+
+        .movie-genres {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+
+        .movie-genre {
+            background: #667eea;
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 5px;
+            font-size: 11px;
+        }
+
+        .movie-description {
+            font-size: 13px;
+            color: #666;
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 4;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .swipe-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+        }
+
+        .swipe-btn {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: none;
+            font-size: 36px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .swipe-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .dislike-btn {
+            background: #ff4757;
+        }
+
+        .like-btn {
+            background: #2ed573;
+        }
+
+        .swipe-indicator {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 80px;
+            font-weight: bold;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+
+        .swipe-indicator.left {
+            left: 30px;
+            color: #ff4757;
+        }
+
+        .swipe-indicator.right {
+            right: 30px;
+            color: #2ed573;
+        }
+
+        .swipe-indicator.visible {
+            opacity: 1;
+        }
+
+        /* Results Screen */
+        .results-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .results-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .results-header h2 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .matches-grid {
+            display: grid;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .match-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 15px;
+            display: flex;
+            gap: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .match-card:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .match-poster {
+            width: 80px;
+            height: 120px;
+            border-radius: 10px;
+            object-fit: cover;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .match-info {
+            flex: 1;
+        }
+
+        .match-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .match-description {
+            font-size: 14px;
+            opacity: 0.8;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .waiting-message {
+            text-align: center;
+            padding: 40px;
+            font-size: 18px;
+        }
+
+        .loader {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #fff;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .session-info {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .session-link {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 10px;
+            word-break: break-all;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .session-link:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .final-choice {
+            text-align: center;
+            padding: 40px;
+        }
+
+        .final-movie {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            margin-top: 20px;
+        }
+
+        .final-poster {
+            width: 100%;
+            max-width: 300px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">🎬</div>
+            <h1>MovieMatch</h1>
+            <p>Выбираем фильм вдвоем</p>
+        </div>
+
+        <!-- Setup Screen -->
+        <div class="screen active" id="setupScreen">
+            <div class="setup-container">
+                <div class="setup-section">
+                    <h3>Количество фильмов</h3>
+                    <div class="slider-container">
+                        <input type="range" min="10" max="100" value="20" class="slider" id="movieCountSlider">
+                        <div class="slider-value" id="movieCountValue">20</div>
+                    </div>
+                </div>
+
+                <div class="setup-section">
+                    <h3>Выберите жанры</h3>
+                    <div class="genre-grid" id="genreGrid">
+                        <!-- Genres will be added dynamically -->
+                    </div>
+                </div>
+
+                <div class="setup-section">
+                    <h3>Страны производства</h3>
+                    <div class="genre-grid" id="countryGrid">
+                        <!-- Countries will be added dynamically -->
+                    </div>
+                </div>
+
+                <div class="setup-section">
+                    <h3>Не раньше какого года</h3>
+                    <div class="slider-container">
+                        <input type="range" min="1970" max="2025" value="2000" class="slider" id="yearSlider">
+                        <div class="slider-value" id="yearValue">2000</div>
+                    </div>
+                </div>
+
+                <button class="btn" id="createSessionBtn">Создать сессию</button>
+            </div>
+        </div>
+
+        <!-- Session Link Screen -->
+        <div class="screen" id="linkScreen">
+            <div class="session-info">
+                <h2>Сессия создана!</h2>
+                <p>Отправьте эту ссылку второму человеку:</p>
+                <div class="session-link" id="sessionLink" onclick="copyLink()">
+                    <!-- Link will be generated -->
+                </div>
+                <p style="margin-top: 15px; font-size: 14px; opacity: 0.8;">Нажмите на ссылку, чтобы скопировать</p>
+            </div>
+            <div class="waiting-message">
+                <div class="loader"></div>
+                <p>Ожидание подключения второго участника...</p>
+            </div>
+        </div>
+
+        <!-- Swipe Screen -->
+        <div class="screen" id="swipeScreen">
+            <div class="swipe-container">
+                <div class="swipe-info">
+                    <div class="selected-genres" id="selectedGenresDisplay">
+                        <strong>Жанры:</strong>
+                        <div class="genre-tags" id="genreTags"></div>
+                    </div>
+                    <div class="movies-counter">
+                        <span class="counter-value" id="moviesRemaining">0</span>
+                        <span class="counter-label">осталось</span>
+                    </div>
+                </div>
+
+                <div class="partner-status" id="partnerStatus">
+                    ✓ Партнер закончил просмотр
+                </div>
+
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                </div>
+
+                <div class="card-stack" id="cardStack">
+                    <div class="swipe-indicator left" id="dislikeIndicator">✗</div>
+                    <div class="swipe-indicator right" id="likeIndicator">♥</div>
+                    <!-- Movie cards will be added dynamically -->
+                </div>
+
+                <div class="swipe-buttons">
+                    <button class="swipe-btn dislike-btn" onclick="swipe('dislike')">✗</button>
+                    <button class="swipe-btn like-btn" onclick="swipe('like')">♥</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Screen -->
+        <div class="screen" id="resultsScreen">
+            <div class="results-container">
+                <div class="results-header">
+                    <h2>Совпадения!</h2>
+                    <p>Вы оба выбрали эти фильмы</p>
+                </div>
+                <div class="matches-grid" id="matchesGrid">
+                    <!-- Matches will be added dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Final Choice Screen -->
+        <div class="screen" id="finalScreen">
+            <div class="final-choice">
+                <h2>Ваш выбор:</h2>
+                <div class="final-movie" id="finalMovie">
+                    <!-- Final movie will be displayed -->
+                </div>
+                <button class="btn" onclick="startOver()">Начать заново</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // TMDB API Configuration
+        const TMDB_API_KEY = 'fa372a103e830cd8e937e23614f75c39';
+        const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
+        const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500';
+
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBQnA0C5Ouf9pC3El_GXX0_aLAcFaYT2Co",
+            authDomain: "filmmatching-8a8bf.firebaseapp.com",
+            databaseURL: "https://filmmatching-8a8bf-default-rtdb.firebaseio.com",
+            projectId: "filmmatching-8a8bf",
+            storageBucket: "filmmatching-8a8bf.firebasestorage.app",
+            messagingSenderId: "104378741912",
+            appId: "1:104378741912:web:aefae82ff333922aef0ced",
+            measurementId: "G-41PV9QGCRM"
+        };
+
+        // Initialize Firebase
+        let database = null;
+        let useFirebase = false;
+
+        // Check if Firebase should be initialized
+        if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
+            // Load Firebase SDK dynamically only if configured
+            const script1 = document.createElement('script');
+            script1.src = 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js';
+            script1.onload = () => {
+                const script2 = document.createElement('script');
+                script2.src = 'https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js';
+                script2.onload = () => {
+                    try {
+                        firebase.initializeApp(firebaseConfig);
+                        database = firebase.database();
+                        useFirebase = true;
+                        console.log('Firebase подключен');
+                    } catch (error) {
+                        console.log('Ошибка инициализации Firebase:', error);
+                    }
+                };
+                document.head.appendChild(script2);
+            };
+            document.head.appendChild(script1);
+        } else {
+            console.log('Firebase не настроен. Работает в демо-режиме (только для одного пользователя).');
+        }
+
+        // Available genres
+        const genres = [
+            { id: 28, name: 'Боевик' },
+            { id: 35, name: 'Комедия' },
+            { id: 18, name: 'Драма' },
+            { id: 27, name: 'Ужасы' },
+            { id: 10749, name: 'Мелодрама' },
+            { id: 878, name: 'Фантастика' },
+            { id: 53, name: 'Триллер' },
+            { id: 16, name: 'Мультфильм' }
+        ];
+
+        // Available countries (ISO 3166-1)
+        const countries = [
+            { code: 'US', name: 'США' },
+            { code: 'GB', name: 'Великобритания' },
+            { code: 'FR', name: 'Франция' },
+            { code: 'DE', name: 'Германия' },
+            { code: 'IT', name: 'Италия' },
+            { code: 'ES', name: 'Испания' },
+            { code: 'RU', name: 'Россия' },
+            { code: 'JP', name: 'Япония' },
+            { code: 'KR', name: 'Корея' },
+            { code: 'CN', name: 'Китай' }
+        ];
+
+        // App State
+        let sessionId = null;
+        let isHost = false;
+        let selectedGenres = [];
+        let selectedCountries = [];
+        let movieCount = 20;
+        let minYear = 2000;
+        let movies = [];
+        let currentMovieIndex = 0;
+        let userChoices = {};
+        let partnerChoices = {};
+
+        // Cleanup references
+        let activeEventListeners = [];
+        let activeFirebaseListeners = [];
+        let currentCardCleanup = null;
+
+        // Helper functions for Firebase listener management
+        function addFirebaseListener(ref, eventType, callback) {
+            if (database) {
+                ref.on(eventType, callback);
+                activeFirebaseListeners.push({ ref, eventType, callback });
+            }
+        }
+
+        function cleanupFirebaseListeners() {
+            activeFirebaseListeners.forEach(({ ref, eventType, callback }) => {
+                ref.off(eventType, callback);
+            });
+            activeFirebaseListeners = [];
+        }
+
+        function cleanupAllListeners() {
+            if (currentCardCleanup) {
+                currentCardCleanup();
+                currentCardCleanup = null;
+            }
+            cleanupFirebaseListeners();
+        }
+
+        // Initialize UI
+        function initializeUI() {
+            // Setup genres
+            const genreGrid = document.getElementById('genreGrid');
+            genres.forEach(genre => {
+                const btn = document.createElement('button');
+                btn.className = 'genre-btn';
+                btn.textContent = genre.name;
+                btn.onclick = () => toggleGenre(genre.id, btn);
+                genreGrid.appendChild(btn);
+            });
+
+            // Setup countries
+            const countryGrid = document.getElementById('countryGrid');
+            countries.forEach(country => {
+                const btn = document.createElement('button');
+                btn.className = 'genre-btn';
+                btn.textContent = country.name;
+                btn.onclick = () => toggleCountry(country.code, btn);
+                countryGrid.appendChild(btn);
+            });
+
+            // Setup movie count slider
+            const slider = document.getElementById('movieCountSlider');
+            const valueDisplay = document.getElementById('movieCountValue');
+            slider.oninput = () => {
+                movieCount = slider.value;
+                valueDisplay.textContent = movieCount;
+            };
+
+            // Setup year slider
+            const yearSlider = document.getElementById('yearSlider');
+            const yearValue = document.getElementById('yearValue');
+            yearSlider.oninput = () => {
+                minYear = yearSlider.value;
+                yearValue.textContent = minYear;
+            };
+        }
+
+        function toggleGenre(genreId, btn) {
+            const index = selectedGenres.indexOf(genreId);
+            if (index > -1) {
+                selectedGenres.splice(index, 1);
+                btn.classList.remove('selected');
+            } else {
+                selectedGenres.push(genreId);
+                btn.classList.add('selected');
+            }
+        }
+
+        function toggleCountry(countryCode, btn) {
+            const index = selectedCountries.indexOf(countryCode);
+            if (index > -1) {
+                selectedCountries.splice(index, 1);
+                btn.classList.remove('selected');
+            } else {
+                selectedCountries.push(countryCode);
+                btn.classList.add('selected');
+            }
+        }
+
+        async function createSession() {
+            if (selectedGenres.length === 0) {
+                alert('Выберите хотя бы один жанр!');
+                return;
+            }
+
+            sessionId = generateSessionId();
+            isHost = true;
+
+            // Create session in Firebase first
+            if (database) {
+                // Show link screen immediately
+                showScreen('linkScreen');
+                document.querySelector('.session-info h2').textContent = 'Создание сессии...';
+                const link = `${window.location.origin}${window.location.pathname}?session=${sessionId}`;
+                document.getElementById('sessionLink').textContent = link;
+                document.querySelector('.session-link').style.display = 'block';
+                document.querySelector('.waiting-message p').textContent = 'Загрузка фильмов...';
+
+                try {
+                    await database.ref(`sessions/${sessionId}`).set({
+                        genres: selectedGenres,
+                        countries: selectedCountries,
+                        movieCount: movieCount,
+                        minYear: minYear,
+                        host: true,
+                        partner: false,
+                        hostChoices: {},
+                        partnerChoices: {},
+                        created: Date.now()
+                    });
+                    console.log('Session created in Firebase:', sessionId);
+                } catch (error) {
+                    console.error('Error creating session in Firebase:', error);
+                    alert('Ошибка создания сессии: ' + error.message);
+                    showScreen('setupScreen');
+                    return;
+                }
+
+                // Listen for partner joining
+                const partnerJoinCallback = (snapshot) => {
+                    if (snapshot.val() === true) {
+                        console.log('Partner joined, starting swipe phase');
+                        // Cleanup this specific listener since partner joined
+                        const ref = database.ref(`sessions/${sessionId}/partner`);
+                        ref.off('value', partnerJoinCallback);
+                        activeFirebaseListeners = activeFirebaseListeners.filter(
+                            listener => listener.callback !== partnerJoinCallback
+                        );
+                        startSwipePhase();
+                    }
+                };
+                addFirebaseListener(
+                    database.ref(`sessions/${sessionId}/partner`),
+                    'value',
+                    partnerJoinCallback
+                );
+            } else {
+                // Demo mode - show loading
+                showScreen('linkScreen');
+                document.querySelector('.session-info h2').textContent = 'Загрузка фильмов...';
+                document.querySelector('.session-link').style.display = 'none';
+                document.querySelector('.waiting-message p').textContent = 'Пожалуйста, подождите...';
+            }
+
+            // Fetch movies in background
+            try {
+                await fetchMovies();
+
+                if (movies.length === 0) {
+                    alert('Не удалось загрузить фильмы. Попробуйте выбрать другие жанры или страны.');
+                    showScreen('setupScreen');
+                    return;
+                }
+
+                // Update status after movies loaded
+                if (database) {
+                    document.querySelector('.session-info h2').textContent = 'Сессия создана!';
+                    document.querySelector('.waiting-message p').textContent = 'Ожидание подключения второго участника...';
+                } else {
+                    // Demo mode - start immediately
+                    startSwipePhase();
+                }
+            } catch (error) {
+                console.error('Error in createSession:', error);
+                alert('Ошибка при загрузке фильмов: ' + error.message);
+                showScreen('setupScreen');
+                return;
+            }
+        }
+
+        async function joinSession(sessionId) {
+            // Show loading
+            showScreen('linkScreen');
+            document.querySelector('.session-info h2').textContent = 'Подключение к сессии...';
+            document.querySelector('.session-link').style.display = 'none';
+
+            if (database) {
+                try {
+                    console.log('Attempting to join session:', sessionId);
+                    const sessionRef = database.ref(`sessions/${sessionId}`);
+                    const snapshot = await sessionRef.once('value');
+
+                    console.log('Session snapshot exists:', snapshot.exists());
+
+                    if (!snapshot.exists()) {
+                        console.error('Session not found:', sessionId);
+                        alert('Сессия не найдена! Возможно, она ещё не создана или истекла.');
+                        window.location.href = window.location.pathname; // Redirect to home
+                        return;
+                    }
+
+                    const sessionData = snapshot.val();
+                    console.log('Session data:', sessionData);
+
+                    selectedGenres = sessionData.genres;
+                    selectedCountries = sessionData.countries || [];
+                    movieCount = sessionData.movieCount;
+                    minYear = sessionData.minYear || 2000;
+                    isHost = false;
+
+                    // Mark partner as joined
+                    await sessionRef.update({ partner: true });
+                    console.log('Marked as partner joined');
+
+                    // Listen for host choices
+                    addFirebaseListener(
+                        database.ref(`sessions/${sessionId}/hostChoices`),
+                        'value',
+                        (snapshot) => {
+                            partnerChoices = snapshot.val() || {};
+                        }
+                    );
+
+                    await fetchMovies();
+                    startSwipePhase();
+                } catch (error) {
+                    console.error('Error joining session:', error);
+                    alert('Ошибка при подключении к сессии: ' + error.message);
+                    window.location.href = window.location.pathname;
+                }
+            } else {
+                alert('Firebase не настроен. Невозможно присоединиться к сессии.');
+                window.location.href = window.location.pathname;
+            }
+        }
+
+        async function fetchMovies() {
+            // Demo movies for testing without API
+            const demoMovies = [
+                { id: 1, title: 'Начало', overview: 'Кобб – талантливый вор, лучший из лучших в опасном искусстве извлечения...', poster: '🎭' },
+                { id: 2, title: 'Интерстеллар', overview: 'Когда засуха приводит человечество к продовольственному кризису...', poster: '🚀' },
+                { id: 3, title: 'Матрица', overview: 'Жизнь Томаса Андерсона разделена на две части...', poster: '💊' },
+                { id: 4, title: 'Темный рыцарь', overview: 'Бэтмен поднимает ставки в войне с криминалом...', poster: '🦇' },
+                { id: 5, title: 'Форрест Гамп', overview: 'От лица главного героя Форреста Гампа...', poster: '🏃' }
+            ];
+
+            movies = [];
+            for (let i = 0; i < movieCount; i++) {
+                movies.push(demoMovies[i % demoMovies.length]);
+            }
+
+            // If TMDB API is configured, fetch real movies
+            if (TMDB_API_KEY !== 'YOUR_TMDB_API_KEY') {
+                try {
+                    const genreParam = selectedGenres.join(',');
+                    const countryParam = selectedCountries.length > 0 ? selectedCountries.join('|') : '';
+                    const pagesNeeded = Math.ceil(movieCount / 20);
+                    const allMovies = [];
+
+                    // Fetch multiple pages if needed
+                    for (let page = 1; page <= Math.min(pagesNeeded, 10); page++) {
+                        let url = `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_genres=${genreParam}&language=ru-RU&sort_by=popularity.desc&page=${page}&include_adult=false&vote_average.gte=5&primary_release_date.gte=${minYear}-01-01`;
+
+                        // Add country filter if selected
+                        if (countryParam) {
+                            url += `&with_origin_country=${countryParam}`;
+                        }
+
+                        const response = await fetch(url);
+                        const data = await response.json();
+
+                        // Filter movies with rating >= 5 and year >= minYear
+                        const filteredResults = data.results.filter(movie => {
+                            const year = movie.release_date ? parseInt(movie.release_date.split('-')[0]) : 0;
+                            return movie.vote_average >= 5 && year >= minYear;
+                        });
+                        allMovies.push(...filteredResults);
+
+                        if (allMovies.length >= movieCount * 1.5) break; // Get extra to account for filtering
+                    }
+
+                    // Fetch detailed info for each movie including credits and translations
+                    const moviePromises = allMovies.slice(0, movieCount * 1.5).map(async (movie) => {
+                        try {
+                            // Fetch movie details with translations
+                            const detailsResponse = await fetch(
+                                `${TMDB_BASE_URL}/movie/${movie.id}?api_key=${TMDB_API_KEY}&language=ru-RU&append_to_response=credits,translations`
+                            );
+                            const details = await detailsResponse.json();
+
+                            // Check for Russian or English language availability
+                            const translations = details.translations?.translations || [];
+                            const hasRussian = translations.some(t => t.iso_639_1 === 'ru');
+                            const hasEnglish = translations.some(t => t.iso_639_1 === 'en');
+                            const originalLanguage = details.original_language;
+
+                            // Exclude movies that don't have Russian OR English
+                            if (!hasRussian && !hasEnglish && originalLanguage !== 'ru' && originalLanguage !== 'en') {
+                                return null;
+                            }
+
+                            // Determine which languages are available
+                            const availableLanguages = [];
+                            if (hasRussian || originalLanguage === 'ru') {
+                                availableLanguages.push('rus');
+                            }
+                            if (hasEnglish || originalLanguage === 'en') {
+                                availableLanguages.push('eng');
+                            }
+
+                            const director = details.credits?.crew?.find(person => person.job === 'Director');
+                            const movieGenres = details.genres?.map(g => g.name) || [];
+
+                            return {
+                                id: movie.id,
+                                title: movie.title,
+                                overview: movie.overview || 'Описание отсутствует',
+                                poster: movie.poster_path ? `${TMDB_IMAGE_BASE}${movie.poster_path}` : '🎬',
+                                rating: movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A',
+                                year: movie.release_date ? movie.release_date.split('-')[0] : 'N/A',
+                                director: director ? director.name : 'Неизвестен',
+                                movieGenres: movieGenres,
+                                languages: availableLanguages
+                            };
+                        } catch (err) {
+                            return null; // Skip on error
+                        }
+                    });
+
+                    const allMovieDetails = await Promise.all(moviePromises);
+                    // Filter out null values and take only requested amount
+                    const filteredMovies = allMovieDetails.filter(movie => movie !== null);
+
+                    console.log(`Loaded ${filteredMovies.length} movies after language filtering`);
+
+                    if (filteredMovies.length === 0) {
+                        console.warn('No movies found matching criteria. Using demo movies.');
+                        // Keep demo movies as fallback
+                    } else {
+                        movies = filteredMovies.slice(0, movieCount);
+                    }
+                } catch (error) {
+                    console.error('Error fetching movies:', error);
+                    console.log('Using demo movies as fallback');
+                    // Demo movies already loaded above, so we keep them
+                }
+            }
+        }
+
+        function startSwipePhase() {
+            showScreen('swipeScreen');
+
+            // Display selected genres
+            const genreTags = document.getElementById('genreTags');
+            genreTags.innerHTML = selectedGenres.map(genreId => {
+                const genre = genres.find(g => g.id === genreId);
+                return `<span class="genre-tag">${genre ? genre.name : ''}</span>`;
+            }).join('');
+
+            // Listen for partner completion if in Firebase mode
+            if (database && sessionId) {
+                const partnerChoicesKey = isHost ? 'partnerChoices' : 'hostChoices';
+                addFirebaseListener(
+                    database.ref(`sessions/${sessionId}/${partnerChoicesKey}`),
+                    'value',
+                    (snapshot) => {
+                        const choices = snapshot.val() || {};
+                        if (Object.keys(choices).length >= movies.length && currentMovieIndex < movies.length) {
+                            document.getElementById('partnerStatus').classList.add('show');
+                        }
+                    }
+                );
+            }
+
+            renderCurrentCard();
+        }
+
+        function renderCurrentCard() {
+            const cardStack = document.getElementById('cardStack');
+            cardStack.innerHTML = '<div class="swipe-indicator left" id="dislikeIndicator">✗</div><div class="swipe-indicator right" id="likeIndicator">♥</div>';
+
+            if (currentMovieIndex >= movies.length) {
+                checkMatches();
+                return;
+            }
+
+            const movie = movies[currentMovieIndex];
+            const card = document.createElement('div');
+            card.className = 'movie-card';
+            card.id = 'currentCard';
+
+            // Language badges
+            const languageBadges = movie.languages && movie.languages.length > 0
+                ? `<div class="language-badges">
+                    ${movie.languages.map(lang => `<span class="language-badge ${lang}">${lang}</span>`).join('')}
+                   </div>`
+                : '';
+
+            const posterContent = movie.poster.startsWith('http')
+                ? `<div class="movie-poster">
+                    <img src="${movie.poster}" alt="${movie.title}">
+                    ${languageBadges}
+                    ${movie.rating !== 'N/A' ? `<div class="movie-rating">⭐ ${movie.rating}</div>` : ''}
+                   </div>`
+                : `<div class="movie-poster">${movie.poster}</div>`;
+
+            const genresHtml = movie.movieGenres && movie.movieGenres.length > 0
+                ? `<div class="movie-genres">${movie.movieGenres.slice(0, 3).map(g => `<span class="movie-genre">${g}</span>`).join('')}</div>`
+                : '';
+
+            const metaHtml = `
+                <div class="movie-meta">
+                    ${movie.year !== 'N/A' ? `<span>📅 ${movie.year}</span>` : ''}
+                    ${movie.director !== 'Неизвестен' ? `<span>🎬 ${movie.director}</span>` : ''}
+                </div>
+            `;
+
+            card.innerHTML = `
+                ${posterContent}
+                <div class="movie-info">
+                    <div class="movie-title">${movie.title}</div>
+                    ${metaHtml}
+                    ${genresHtml}
+                    <div class="movie-description">${movie.overview}</div>
+                </div>
+            `;
+
+            cardStack.appendChild(card);
+            setupSwipeHandlers(card);
+            updateProgress();
+            updateCounter();
+        }
+
+        function setupSwipeHandlers(card) {
+            // Cleanup previous card's listeners
+            if (currentCardCleanup) {
+                currentCardCleanup();
+            }
+
+            let startX = 0;
+            let currentX = 0;
+            let isDragging = false;
+
+            const dislikeIndicator = document.getElementById('dislikeIndicator');
+            const likeIndicator = document.getElementById('likeIndicator');
+
+            function startDrag(e) {
+                isDragging = true;
+                startX = e.type === 'mousedown' ? e.clientX : e.touches[0].clientX;
+                card.classList.add('swiping');
+            }
+
+            function drag(e) {
+                if (!isDragging) return;
+                currentX = e.type === 'mousemove' ? e.clientX : e.touches[0].clientX;
+                const diff = currentX - startX;
+                card.style.transform = `translateX(${diff}px) rotate(${diff * 0.1}deg)`;
+
+                if (diff < -50) {
+                    dislikeIndicator.classList.add('visible');
+                    likeIndicator.classList.remove('visible');
+                } else if (diff > 50) {
+                    likeIndicator.classList.add('visible');
+                    dislikeIndicator.classList.remove('visible');
+                } else {
+                    dislikeIndicator.classList.remove('visible');
+                    likeIndicator.classList.remove('visible');
+                }
+            }
+
+            function endDrag() {
+                if (!isDragging) return;
+                isDragging = false;
+                card.classList.remove('swiping');
+
+                const diff = currentX - startX;
+                if (Math.abs(diff) > 100) {
+                    swipe(diff > 0 ? 'like' : 'dislike');
+                } else {
+                    card.style.transform = '';
+                    dislikeIndicator.classList.remove('visible');
+                    likeIndicator.classList.remove('visible');
+                }
+            }
+
+            // Attach listeners to card
+            card.addEventListener('mousedown', startDrag);
+            card.addEventListener('touchstart', startDrag);
+
+            // Attach listeners to document
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('touchmove', drag);
+            document.addEventListener('mouseup', endDrag);
+            document.addEventListener('touchend', endDrag);
+
+            // Store cleanup function
+            currentCardCleanup = function() {
+                card.removeEventListener('mousedown', startDrag);
+                card.removeEventListener('touchstart', startDrag);
+                document.removeEventListener('mousemove', drag);
+                document.removeEventListener('touchmove', drag);
+                document.removeEventListener('mouseup', endDrag);
+                document.removeEventListener('touchend', endDrag);
+            };
+        }
+
+        function swipe(choice) {
+            const movie = movies[currentMovieIndex];
+            userChoices[movie.id] = choice === 'like';
+
+            // Save to Firebase
+            if (database && sessionId) {
+                const choicesKey = isHost ? 'hostChoices' : 'partnerChoices';
+                database.ref(`sessions/${sessionId}/${choicesKey}/${movie.id}`).set(choice === 'like');
+            }
+
+            const card = document.getElementById('currentCard');
+            if (card) {
+                const direction = choice === 'like' ? 1 : -1;
+                card.style.transform = `translateX(${direction * 1000}px) rotate(${direction * 50}deg)`;
+                setTimeout(() => {
+                    currentMovieIndex++;
+                    renderCurrentCard();
+                }, 300);
+            } else {
+                currentMovieIndex++;
+                renderCurrentCard();
+            }
+        }
+
+        function updateProgress() {
+            const progress = (currentMovieIndex / movies.length) * 100;
+            document.getElementById('progressFill').style.width = `${progress}%`;
+        }
+
+        function updateCounter() {
+            const remaining = movies.length - currentMovieIndex;
+            document.getElementById('moviesRemaining').textContent = remaining;
+        }
+
+        async function checkMatches() {
+            // Wait for partner to finish if needed
+            if (database && sessionId) {
+                showScreen('linkScreen');
+                document.querySelector('.session-info h2').textContent = 'Ожидание партнера...';
+
+                const partnerChoicesKey = isHost ? 'partnerChoices' : 'hostChoices';
+                const partnerRef = database.ref(`sessions/${sessionId}/${partnerChoicesKey}`);
+
+                let matchesShown = false; // Prevent multiple calls
+                const checkPartnerCallback = (snapshot) => {
+                    partnerChoices = snapshot.val() || {};
+                    if (Object.keys(partnerChoices).length >= movies.length && !matchesShown) {
+                        matchesShown = true;
+                        // Remove this listener
+                        partnerRef.off('value', checkPartnerCallback);
+                        activeFirebaseListeners = activeFirebaseListeners.filter(
+                            listener => listener.callback !== checkPartnerCallback
+                        );
+                        showMatches();
+                    }
+                };
+
+                addFirebaseListener(partnerRef, 'value', checkPartnerCallback);
+
+                // Add timeout after 5 minutes
+                setTimeout(() => {
+                    if (!matchesShown) {
+                        matchesShown = true;
+                        partnerRef.off('value', checkPartnerCallback);
+                        activeFirebaseListeners = activeFirebaseListeners.filter(
+                            listener => listener.callback !== checkPartnerCallback
+                        );
+                        alert('Время ожидания партнера истекло. Попробуйте создать новую сессию.');
+                        startOver();
+                    }
+                }, 5 * 60 * 1000); // 5 minutes
+            } else {
+                // Demo mode - simulate partner choices (randomly like 40-60% of movies)
+                movies.forEach(movie => {
+                    partnerChoices[movie.id] = Math.random() > 0.5;
+                });
+                setTimeout(() => showMatches(), 500);
+            }
+        }
+
+        function showMatches() {
+            const matches = movies.filter(movie =>
+                userChoices[movie.id] === true && partnerChoices[movie.id] === true
+            );
+
+            if (matches.length === 0) {
+                alert('К сожалению, совпадений не найдено. Попробуйте еще раз!');
+                startOver();
+                return;
+            }
+
+            if (matches.length === 1) {
+                showFinalChoice(matches[0]);
+                return;
+            }
+
+            showScreen('resultsScreen');
+            const matchesGrid = document.getElementById('matchesGrid');
+            matchesGrid.innerHTML = matches.map(movie => {
+                const posterContent = movie.poster.startsWith('http')
+                    ? `<img src="${movie.poster}" class="match-poster" alt="${movie.title}">`
+                    : `<div class="match-poster" style="display: flex; align-items: center; justify-content: center; font-size: 40px;">${movie.poster}</div>`;
+
+                return `
+                    <div class="match-card" onclick="selectFinalMovie(${movie.id})">
+                        ${posterContent}
+                        <div class="match-info">
+                            <div class="match-title">${movie.title}</div>
+                            <div class="match-description">${movie.overview}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Start second round of voting
+            currentMovieIndex = 0;
+            movies = matches;
+            userChoices = {};
+            partnerChoices = {};
+        }
+
+        function selectFinalMovie(movieId) {
+            // Simple selection - click to choose
+            const movie = movies.find(m => m.id === movieId);
+
+            // Save selection
+            if (database && sessionId) {
+                const selectionKey = isHost ? 'hostSelection' : 'partnerSelection';
+                database.ref(`sessions/${sessionId}/${selectionKey}`).set(movieId);
+
+                // Wait for partner selection
+                const partnerKey = isHost ? 'partnerSelection' : 'hostSelection';
+                const partnerRef = database.ref(`sessions/${sessionId}/${partnerKey}`);
+
+                let selectionMade = false;
+                const partnerSelectionCallback = (snapshot) => {
+                    const partnerSelection = snapshot.val();
+                    if (partnerSelection && !selectionMade) {
+                        selectionMade = true;
+                        // Remove listener
+                        partnerRef.off('value', partnerSelectionCallback);
+                        activeFirebaseListeners = activeFirebaseListeners.filter(
+                            listener => listener.callback !== partnerSelectionCallback
+                        );
+
+                        if (partnerSelection === movieId) {
+                            showFinalChoice(movie);
+                        } else {
+                            // Different choices - show random
+                            const partnerId = partnerSelection;
+                            const partnerMovie = movies.find(m => m.id === partnerId);
+                            const finalMovie = Math.random() > 0.5 ? movie : partnerMovie;
+                            showFinalChoice(finalMovie);
+                        }
+                    }
+                };
+
+                addFirebaseListener(partnerRef, 'value', partnerSelectionCallback);
+
+                // Add timeout
+                setTimeout(() => {
+                    if (!selectionMade) {
+                        selectionMade = true;
+                        partnerRef.off('value', partnerSelectionCallback);
+                        activeFirebaseListeners = activeFirebaseListeners.filter(
+                            listener => listener.callback !== partnerSelectionCallback
+                        );
+                        alert('Время ожидания выбора партнера истекло.');
+                        showFinalChoice(movie); // Show user's choice
+                    }
+                }, 2 * 60 * 1000); // 2 minutes for final selection
+            } else {
+                showFinalChoice(movie);
+            }
+        }
+
+        function showFinalChoice(movie) {
+            showScreen('finalScreen');
+            const posterContent = movie.poster.startsWith('http')
+                ? `<img src="${movie.poster}" class="final-poster" alt="${movie.title}">`
+                : `<div style="font-size: 120px; margin-bottom: 20px;">${movie.poster}</div>`;
+
+            document.getElementById('finalMovie').innerHTML = `
+                ${posterContent}
+                <h2 style="font-size: 28px; margin-bottom: 15px;">${movie.title}</h2>
+                <p style="font-size: 16px; opacity: 0.9;">${movie.overview}</p>
+            `;
+        }
+
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(screen => {
+                screen.classList.remove('active');
+            });
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        function generateSessionId() {
+            return Math.random().toString(36).substring(2, 10);
+        }
+
+        function copyLink() {
+            const link = document.getElementById('sessionLink').textContent;
+            navigator.clipboard.writeText(link).then(() => {
+                alert('Ссылка скопирована!');
+            });
+        }
+
+        function startOver() {
+            location.reload();
+        }
+
+        // Initialize app
+        document.getElementById('createSessionBtn').onclick = createSession;
+
+        // Check if joining session
+        const urlParams = new URLSearchParams(window.location.search);
+        const sessionParam = urlParams.get('session');
+
+        if (sessionParam) {
+            sessionId = sessionParam;
+            console.log('Joining session from URL:', sessionId);
+
+            // Wait for Firebase to initialize before joining
+            if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
+                // Firebase is configured, wait for it to load
+                console.log('Waiting for Firebase to initialize...');
+                let attempts = 0;
+                const checkFirebase = setInterval(() => {
+                    attempts++;
+                    console.log(`Firebase check attempt ${attempts}, database:`, database);
+
+                    if (database !== null) {
+                        clearInterval(checkFirebase);
+                        console.log('Firebase ready, joining session');
+                        joinSession(sessionId);
+                    }
+                }, 100);
+
+                // Timeout after 10 seconds
+                setTimeout(() => {
+                    if (database === null) {
+                        clearInterval(checkFirebase);
+                        console.error('Firebase initialization timeout');
+                        alert('Ошибка подключения к Firebase. Попробуйте обновить страницу.');
+                        window.location.href = window.location.pathname;
+                    }
+                }, 10000);
+            } else {
+                alert('Firebase не настроен. Невозможно присоединиться к сессии.');
+                window.location.href = window.location.pathname;
+            }
+        } else {
+            initializeUI();
+        }
+    </script>
+</body>
+</html>
