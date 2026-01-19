@@ -250,6 +250,26 @@
         }
 
         /* Swipe Screen */
+        .session-code {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-family: 'Courier New', monospace;
+            color: rgba(255, 255, 255, 0.9);
+            z-index: 10;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .session-code strong {
+            opacity: 0.7;
+            font-weight: 600;
+        }
+
         .swipe-container {
             flex: 1;
             display: flex;
@@ -1103,6 +1123,9 @@
 
         <!-- Swipe Screen -->
         <div class="screen" id="swipeScreen">
+            <div class="session-code" id="sessionCodeDisplay" style="display: none;">
+                <strong>Код:</strong> <span id="sessionCodeText"></span>
+            </div>
             <div class="swipe-container">
                 <div class="swipe-info">
                     <div class="selected-genres" id="selectedGenresDisplay">
@@ -1617,22 +1640,76 @@
         }
 
         async function fetchMovies() {
+            console.log('fetchMovies() started with', movieCount, 'movies requested');
+
             // Demo movies for testing without API
             const demoMovies = [
-                { id: 1, title: 'Начало', overview: 'Кобб – талантливый вор, лучший из лучших в опасном искусстве извлечения...', poster: '🎭' },
-                { id: 2, title: 'Интерстеллар', overview: 'Когда засуха приводит человечество к продовольственному кризису...', poster: '🚀' },
-                { id: 3, title: 'Матрица', overview: 'Жизнь Томаса Андерсона разделена на две части...', poster: '💊' },
-                { id: 4, title: 'Темный рыцарь', overview: 'Бэтмен поднимает ставки в войне с криминалом...', poster: '🦇' },
-                { id: 5, title: 'Форрест Гамп', overview: 'От лица главного героя Форреста Гампа...', poster: '🏃' }
+                {
+                    id: 1,
+                    title: 'Начало',
+                    overview: 'Кобб – талантливый вор, лучший из лучших в опасном искусстве извлечения...',
+                    poster: '🎭',
+                    rating: '8.8',
+                    year: '2010',
+                    director: 'Christopher Nolan',
+                    movieGenres: ['Фантастика', 'Триллер'],
+                    languages: ['rus', 'eng']
+                },
+                {
+                    id: 2,
+                    title: 'Интерстеллар',
+                    overview: 'Когда засуха приводит человечество к продовольственному кризису...',
+                    poster: '🚀',
+                    rating: '8.6',
+                    year: '2014',
+                    director: 'Christopher Nolan',
+                    movieGenres: ['Фантастика', 'Драма'],
+                    languages: ['rus', 'eng']
+                },
+                {
+                    id: 3,
+                    title: 'Матрица',
+                    overview: 'Жизнь Томаса Андерсона разделена на две части...',
+                    poster: '💊',
+                    rating: '8.7',
+                    year: '1999',
+                    director: 'Lana Wachowski',
+                    movieGenres: ['Фантастика', 'Боевик'],
+                    languages: ['rus', 'eng']
+                },
+                {
+                    id: 4,
+                    title: 'Темный рыцарь',
+                    overview: 'Бэтмен поднимает ставки в войне с криминалом...',
+                    poster: '🦇',
+                    rating: '9.0',
+                    year: '2008',
+                    director: 'Christopher Nolan',
+                    movieGenres: ['Боевик', 'Драма'],
+                    languages: ['rus', 'eng']
+                },
+                {
+                    id: 5,
+                    title: 'Форрест Гамп',
+                    overview: 'От лица главного героя Форреста Гампа...',
+                    poster: '🏃',
+                    rating: '8.8',
+                    year: '1994',
+                    director: 'Robert Zemeckis',
+                    movieGenres: ['Драма', 'Мелодрама'],
+                    languages: ['rus', 'eng']
+                }
             ];
 
             movies = [];
             for (let i = 0; i < movieCount; i++) {
                 movies.push(demoMovies[i % demoMovies.length]);
             }
+            console.log('Demo movies loaded as fallback:', movies.length);
 
             // If TMDB API is configured, fetch real movies
             if (TMDB_API_KEY !== 'YOUR_TMDB_API_KEY') {
+                console.log('TMDB API key found, fetching real movies...');
                 try {
                     const genreParam = selectedGenres.join(',');
                     const countryParam = selectedCountries.length > 0 ? selectedCountries.join('|') : '';
@@ -1648,18 +1725,22 @@
                             url += `&with_origin_country=${countryParam}`;
                         }
 
+                        console.log(`Fetching page ${page}...`);
                         const response = await fetchWithRetry(url);
                         const data = await response.json();
+                        console.log(`Page ${page} returned ${data.results?.length || 0} movies`);
 
                         // Filter movies with rating >= 5 and year >= minYear
                         const filteredResults = data.results.filter(movie => {
                             const year = movie.release_date ? parseInt(movie.release_date.split('-')[0]) : 0;
                             return movie.vote_average >= 5 && year >= minYear;
                         });
+                        console.log(`After filtering: ${filteredResults.length} movies`);
                         allMovies.push(...filteredResults);
 
                         if (allMovies.length >= movieCount * 1.5) break; // Get extra to account for filtering
                     }
+                    console.log(`Total movies fetched: ${allMovies.length}`);
 
                     // Fetch detailed info for each movie including credits and translations
                     const moviePromises = allMovies.slice(0, movieCount * 1.5).map(async (movie) => {
@@ -1709,7 +1790,9 @@
                         }
                     });
 
+                    console.log(`Fetching detailed info for ${moviePromises.length} movies...`);
                     const allMovieDetails = await Promise.all(moviePromises);
+
                     // Filter out null values and take only requested amount
                     const filteredMovies = allMovieDetails.filter(movie => movie !== null);
 
@@ -1717,20 +1800,33 @@
 
                     if (filteredMovies.length === 0) {
                         console.warn('No movies found matching criteria. Using demo movies.');
+                        showToast('Не удалось загрузить фильмы из TMDB. Используются демо-фильмы.', 'error', 5000);
                         // Keep demo movies as fallback
                     } else {
                         movies = filteredMovies.slice(0, movieCount);
+                        console.log(`Successfully loaded ${movies.length} real movies from TMDB`);
                     }
                 } catch (error) {
                     console.error('Error fetching movies:', error);
                     console.log('Using demo movies as fallback');
+                    showToast('Ошибка загрузки фильмов: ' + error.message, 'error', 5000);
                     // Demo movies already loaded above, so we keep them
                 }
+            } else {
+                console.log('TMDB API key not configured, using demo movies only');
             }
+
+            console.log('fetchMovies() completed. Total movies:', movies.length);
         }
 
         function startSwipePhase() {
             showScreen('swipeScreen');
+
+            // Display session code if available
+            if (sessionId) {
+                document.getElementById('sessionCodeDisplay').style.display = 'block';
+                document.getElementById('sessionCodeText').textContent = sessionId;
+            }
 
             // Display selected genres
             const genreTags = document.getElementById('genreTags');
