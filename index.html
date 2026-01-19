@@ -649,6 +649,55 @@
             word-wrap: break-word;
         }
 
+        .selection-indicators {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .selection-badge {
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .selection-badge.you {
+            background: rgba(46, 213, 115, 0.3);
+            border: 2px solid rgba(46, 213, 115, 0.8);
+            color: #fff;
+        }
+
+        .selection-badge.partner {
+            background: rgba(33, 150, 243, 0.3);
+            border: 2px solid rgba(33, 150, 243, 0.8);
+            color: #fff;
+        }
+
+        .match-card.selected-by-you {
+            border-color: rgba(46, 213, 115, 0.8);
+            box-shadow: 0 0 20px rgba(46, 213, 115, 0.3);
+        }
+
+        .confirm-selection-container {
+            position: sticky;
+            bottom: 20px;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .confirm-selection-info {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
         .waiting-message {
             text-align: center;
             padding: 40px;
@@ -1279,6 +1328,9 @@
         let currentMovieIndex = 0;
         let userChoices = {};
         let partnerChoices = {};
+        let matchedMovies = []; // Movies that both users liked
+        let selectedMovieId = null; // User's final choice
+        let isConfirmed = false; // Whether user confirmed their choice
 
         // Cleanup references
         let activeEventListeners = [];
@@ -1888,12 +1940,27 @@
                 const partnerChoicesKey = isHost ? 'partnerChoices' : 'hostChoices';
                 const partnerRef = database.ref(`sessions/${sessionId}/${partnerChoicesKey}`);
 
-                let matchesShown = false; // Prevent multiple calls
+                // First, check current state (partner might have already finished)
+                try {
+                    const snapshot = await partnerRef.once('value');
+                    partnerChoices = snapshot.val() || {};
+
+                    // If partner already finished, show matches immediately
+                    if (Object.keys(partnerChoices).length >= movies.length) {
+                        console.log('Partner already finished, showing matches');
+                        showMatches();
+                        return;
+                    }
+                } catch (error) {
+                    console.error('Error checking partner choices:', error);
+                }
+
+                // Partner hasn't finished yet, set up listener
+                let matchesShown = false;
                 const checkPartnerCallback = (snapshot) => {
                     partnerChoices = snapshot.val() || {};
                     if (Object.keys(partnerChoices).length >= movies.length && !matchesShown) {
                         matchesShown = true;
-                        // Remove this listener
                         partnerRef.off('value', checkPartnerCallback);
                         activeFirebaseListeners = activeFirebaseListeners.filter(
                             listener => listener.callback !== checkPartnerCallback
@@ -1941,64 +2008,113 @@
                 return;
             }
 
+            // Save matched movies for later reference
+            matchedMovies = matches;
+
             showScreen('resultsScreen');
+            renderMatchesGrid();
+        }
+
+        function renderMatchesGrid() {
             const matchesGrid = document.getElementById('matchesGrid');
-            matchesGrid.innerHTML = matches.map(movie => {
+            const selectedClass = selectedMovieId ? 'selected-by-you' : '';
+
+            matchesGrid.innerHTML = matchedMovies.map(movie => {
                 const posterContent = movie.poster.startsWith('http')
                     ? `<img src="${escapeHtml(movie.poster)}" class="match-poster" alt="${escapeHtml(movie.title)}">`
                     : `<div class="match-poster" style="display: flex; align-items: center; justify-content: center; font-size: 40px;">${movie.poster}</div>`;
 
+                const isSelected = selectedMovieId === movie.id;
+                const cardClass = isSelected ? 'match-card selected-by-you' : 'match-card';
+
                 return `
-                    <div class="match-card" onclick="showMovieModal(${movie.id})">
+                    <div class="${cardClass}" onclick="toggleMovieSelection(${movie.id})">
                         ${posterContent}
                         <div class="match-info">
                             <div class="match-title">${escapeHtml(movie.title)}</div>
                             <div class="match-description">${escapeHtml(movie.overview)}</div>
+                            <div class="selection-indicators">
+                                ${isSelected ? '<span class="selection-badge you">✓ Ваш выбор</span>' : ''}
+                            </div>
                         </div>
                     </div>
                 `;
             }).join('');
 
-            // Start second round of voting
-            currentMovieIndex = 0;
-            movies = matches;
-            userChoices = {};
-            partnerChoices = {};
+            // Add confirmation button
+            matchesGrid.innerHTML += `
+                <div class="confirm-selection-container">
+                    <div class="confirm-selection-info">
+                        ${selectedMovieId
+                            ? 'Выбран фильм. Нажмите "Подтвердить", чтобы отправить выбор партнеру.'
+                            : 'Нажмите на карточку фильма, чтобы выбрать его.'}
+                    </div>
+                    <button class="btn" id="confirmBtn" onclick="confirmSelection()" ${!selectedMovieId ? 'disabled' : ''}>
+                        Подтвердить выбор
+                    </button>
+                </div>
+            `;
         }
 
-        function selectFinalMovie(movieId) {
-            // Simple selection - click to choose
-            const movie = movies.find(m => m.id === movieId);
+        function toggleMovieSelection(movieId) {
+            if (isConfirmed) return; // Already confirmed, can't change
 
-            // Save selection
+            // Toggle selection
+            selectedMovieId = selectedMovieId === movieId ? null : movieId;
+            renderMatchesGrid();
+        }
+
+        function confirmSelection() {
+            if (!selectedMovieId || isConfirmed) return;
+
+            isConfirmed = true;
+
+            // Update UI to show confirmation
+            document.getElementById('confirmBtn').disabled = true;
+            document.getElementById('confirmBtn').textContent = 'Ожидание партнера...';
+
+            // Send selection to Firebase and wait for partner
+            waitForPartnerSelection();
+        }
+
+        async function waitForPartnerSelection() {
+            const movie = matchedMovies.find(m => m.id === selectedMovieId);
+            if (!movie) return;
+
+            // Save selection to Firebase
             if (database && sessionId) {
                 const selectionKey = isHost ? 'hostSelection' : 'partnerSelection';
-                database.ref(`sessions/${sessionId}/${selectionKey}`).set(movieId);
+                await database.ref(`sessions/${sessionId}/${selectionKey}`).set(selectedMovieId);
 
-                // Wait for partner selection
+                // Check if partner already selected
                 const partnerKey = isHost ? 'partnerSelection' : 'hostSelection';
                 const partnerRef = database.ref(`sessions/${sessionId}/${partnerKey}`);
 
+                try {
+                    const snapshot = await partnerRef.once('value');
+                    const partnerSelection = snapshot.val();
+
+                    // If partner already selected, determine final movie immediately
+                    if (partnerSelection) {
+                        console.log('Partner already selected:', partnerSelection);
+                        determineFinalMovie(partnerSelection);
+                        return;
+                    }
+                } catch (error) {
+                    console.error('Error checking partner selection:', error);
+                }
+
+                // Partner hasn't selected yet, wait for them
                 let selectionMade = false;
                 const partnerSelectionCallback = (snapshot) => {
                     const partnerSelection = snapshot.val();
                     if (partnerSelection && !selectionMade) {
                         selectionMade = true;
-                        // Remove listener
                         partnerRef.off('value', partnerSelectionCallback);
                         activeFirebaseListeners = activeFirebaseListeners.filter(
                             listener => listener.callback !== partnerSelectionCallback
                         );
-
-                        if (partnerSelection === movieId) {
-                            showFinalChoice(movie);
-                        } else {
-                            // Different choices - show random
-                            const partnerId = partnerSelection;
-                            const partnerMovie = movies.find(m => m.id === partnerId);
-                            const finalMovie = Math.random() > 0.5 ? movie : partnerMovie;
-                            showFinalChoice(finalMovie);
-                        }
+                        determineFinalMovie(partnerSelection);
                     }
                 };
 
@@ -2017,7 +2133,27 @@
                     }
                 }, 2 * 60 * 1000); // 2 minutes for final selection
             } else {
+                // Demo mode
                 showFinalChoice(movie);
+            }
+        }
+
+        function determineFinalMovie(partnerMovieId) {
+            const userMovie = matchedMovies.find(m => m.id === selectedMovieId);
+            const partnerMovie = matchedMovies.find(m => m.id === partnerMovieId);
+
+            if (!userMovie || !partnerMovie) {
+                console.error('Could not find movies for selection');
+                return;
+            }
+
+            if (selectedMovieId === partnerMovieId) {
+                // Both selected same movie!
+                showFinalChoice(userMovie);
+            } else {
+                // Different choices - pick randomly
+                const finalMovie = Math.random() > 0.5 ? userMovie : partnerMovie;
+                showFinalChoice(finalMovie);
             }
         }
 
@@ -2154,7 +2290,8 @@
 
         // Movie modal functions
         function showMovieModal(movieId) {
-            const movie = movies.find(m => m.id === movieId);
+            // Try to find movie in matched movies first (if on results screen), otherwise in all movies
+            const movie = matchedMovies.find(m => m.id === movieId) || movies.find(m => m.id === movieId);
             if (!movie) return;
 
             const modal = document.getElementById('movieModal');
@@ -2186,6 +2323,9 @@
                 </div>
             `;
 
+            // Show "Select this movie" button only if we're on results screen and not yet confirmed
+            const showSelectButton = matchedMovies.length > 0 && !isConfirmed;
+
             modalDetails.innerHTML = `
                 ${posterContent}
                 <div class="modal-body">
@@ -2193,7 +2333,7 @@
                     ${metaHtml}
                     ${genresHtml}
                     <div class="modal-description">${escapeHtml(movie.overview)}</div>
-                    <button class="btn" onclick="selectFinalMovieFromModal(${movie.id})">Выбрать этот фильм</button>
+                    ${showSelectButton ? `<button class="btn" onclick="selectMovieFromModal(${movie.id})">Выбрать этот фильм</button>` : ''}
                 </div>
             `;
 
@@ -2207,9 +2347,9 @@
             }
         }
 
-        function selectFinalMovieFromModal(movieId) {
+        function selectMovieFromModal(movieId) {
             closeMovieModal();
-            selectFinalMovie(movieId);
+            toggleMovieSelection(movieId);
         }
 
         // Initialize app
