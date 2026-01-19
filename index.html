@@ -1532,24 +1532,48 @@
                     return;
                 }
 
-                // Listen for partner joining
-                const partnerJoinCallback = (snapshot) => {
-                    if (snapshot.val() === true) {
-                        console.log('Partner joined, starting swipe phase');
-                        // Cleanup this specific listener since partner joined
-                        const ref = database.ref(`sessions/${sessionId}/partner`);
-                        ref.off('value', partnerJoinCallback);
-                        activeFirebaseListeners = activeFirebaseListeners.filter(
-                            listener => listener.callback !== partnerJoinCallback
-                        );
-                        startSwipePhase();
+                // Check if partner already joined (in case they joined while we were creating session)
+                const partnerRef = database.ref(`sessions/${sessionId}/partner`);
+                const checkPartner = async () => {
+                    try {
+                        const snapshot = await partnerRef.once('value');
+                        const partnerJoined = snapshot.val();
+                        console.log('Initial partner check:', partnerJoined);
+
+                        if (partnerJoined === true) {
+                            console.log('Partner already joined, starting swipe phase immediately');
+                            startSwipePhase();
+                            return true;
+                        }
+                        return false;
+                    } catch (error) {
+                        console.error('Error checking partner status:', error);
+                        return false;
                     }
                 };
-                addFirebaseListener(
-                    database.ref(`sessions/${sessionId}/partner`),
-                    'value',
-                    partnerJoinCallback
-                );
+
+                // Check first, then set up listener if needed
+                const alreadyJoined = await checkPartner();
+                if (!alreadyJoined) {
+                    console.log('Partner not joined yet, setting up listener...');
+                    // Listen for partner joining
+                    let partnerJoinedFlag = false;
+                    const partnerJoinCallback = (snapshot) => {
+                        const value = snapshot.val();
+                        console.log('Partner listener triggered, value:', value);
+                        if (value === true && !partnerJoinedFlag) {
+                            partnerJoinedFlag = true;
+                            console.log('Partner joined, starting swipe phase');
+                            // Cleanup this specific listener since partner joined
+                            partnerRef.off('value', partnerJoinCallback);
+                            activeFirebaseListeners = activeFirebaseListeners.filter(
+                                listener => listener.callback !== partnerJoinCallback
+                            );
+                            startSwipePhase();
+                        }
+                    };
+                    addFirebaseListener(partnerRef, 'value', partnerJoinCallback);
+                }
             } else {
                 // Demo mode - show loading
                 showScreen('linkScreen');
@@ -1560,7 +1584,9 @@
 
             // Fetch movies in background
             try {
+                console.log('Host: Starting to fetch movies...');
                 await fetchMovies();
+                console.log('Host: Movies fetched successfully, count:', movies.length);
 
                 if (movies.length === 0) {
                     alert('Не удалось загрузить фильмы. Попробуйте выбрать другие жанры или страны.');
@@ -1572,6 +1598,20 @@
                 if (database) {
                     document.querySelector('.session-info h2').textContent = 'Сессия создана!';
                     document.querySelector('.waiting-message p').textContent = 'Ожидание подключения второго участника...';
+
+                    // Check again if partner joined while we were fetching movies
+                    console.log('Host: Checking if partner joined while fetching movies...');
+                    try {
+                        const snapshot = await database.ref(`sessions/${sessionId}/partner`).once('value');
+                        if (snapshot.val() === true) {
+                            console.log('Host: Partner already joined! Starting swipe phase now.');
+                            startSwipePhase();
+                        } else {
+                            console.log('Host: Partner not joined yet, waiting...');
+                        }
+                    } catch (error) {
+                        console.error('Host: Error checking partner status after fetch:', error);
+                    }
                 } else {
                     // Demo mode - start immediately
                     startSwipePhase();
@@ -1625,8 +1665,14 @@
                     isHost = false;
 
                     // Mark partner as joined
+                    console.log('Setting partner: true in Firebase...');
                     await sessionRef.update({ partner: true });
-                    console.log('Marked as partner joined');
+                    console.log('Successfully set partner: true');
+
+                    // Verify the update
+                    const verifySnapshot = await sessionRef.once('value');
+                    const verifyData = verifySnapshot.val();
+                    console.log('Verified session data after update:', verifyData);
 
                     // Listen for host choices
                     addFirebaseListener(
@@ -1637,7 +1683,9 @@
                         }
                     );
 
+                    console.log('Fetching movies as partner...');
                     await fetchMovies();
+                    console.log('Movies fetched, starting swipe phase as partner');
                     startSwipePhase();
                 } catch (error) {
                     console.error('Error joining session:', error);
