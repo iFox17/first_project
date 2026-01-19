@@ -251,9 +251,6 @@
 
         /* Swipe Screen */
         .session-code {
-            position: absolute;
-            top: 10px;
-            left: 10px;
             background: rgba(255, 255, 255, 0.15);
             backdrop-filter: blur(10px);
             padding: 8px 12px;
@@ -261,13 +258,24 @@
             font-size: 11px;
             font-family: 'Courier New', monospace;
             color: rgba(255, 255, 255, 0.9);
-            z-index: 10;
             border: 1px solid rgba(255, 255, 255, 0.2);
+            text-align: center;
+            margin-bottom: 15px;
         }
 
         .session-code strong {
             opacity: 0.7;
             font-weight: 600;
+        }
+
+        /* Session code on swipe screen - absolute positioning */
+        .swipe-screen .session-code {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            z-index: 10;
+            margin-bottom: 0;
         }
 
         .swipe-container {
@@ -1107,6 +1115,9 @@
 
         <!-- Session Link Screen -->
         <div class="screen" id="linkScreen">
+            <div class="session-code" id="sessionCodeLink" style="display: none;">
+                <strong>Код сессии:</strong> <span id="sessionCodeTextLink"></span>
+            </div>
             <div class="session-info">
                 <h2>Сессия создана!</h2>
                 <p>Отправьте эту ссылку второму человеку:</p>
@@ -1161,6 +1172,9 @@
 
         <!-- Results Screen -->
         <div class="screen" id="resultsScreen">
+            <div class="session-code" id="sessionCodeResults" style="display: none;">
+                <strong>Код сессии:</strong> <span id="sessionCodeTextResults"></span>
+            </div>
             <div class="results-container">
                 <div class="results-header">
                     <h2>Совпадения!</h2>
@@ -1174,6 +1188,9 @@
 
         <!-- Final Choice Screen -->
         <div class="screen" id="finalScreen">
+            <div class="session-code" id="sessionCodeFinal" style="display: none;">
+                <strong>Код сессии:</strong> <span id="sessionCodeTextFinal"></span>
+            </div>
             <div class="final-choice">
                 <h2>Ваш выбор:</h2>
                 <div class="final-movie" id="finalMovie">
@@ -1776,9 +1793,24 @@
                     const pagesNeeded = Math.ceil(movieCount / 20);
                     const allMovies = [];
 
+                    // Randomize sorting method for variety
+                    const sortOptions = [
+                        'popularity.desc',
+                        'vote_average.desc',
+                        'vote_count.desc',
+                        'primary_release_date.desc'
+                    ];
+                    const randomSort = sortOptions[Math.floor(Math.random() * sortOptions.length)];
+                    console.log('Using random sort:', randomSort);
+
+                    // Start from a random page (1-10) for more variety
+                    const startPage = Math.floor(Math.random() * 10) + 1;
+                    console.log('Starting from random page:', startPage);
+
                     // Fetch multiple pages if needed
-                    for (let page = 1; page <= Math.min(pagesNeeded, 10); page++) {
-                        let url = `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_genres=${genreParam}&language=ru-RU&sort_by=popularity.desc&page=${page}&include_adult=false&vote_average.gte=5&primary_release_date.gte=${minYear}-01-01`;
+                    for (let i = 0; i < Math.min(pagesNeeded, 10); i++) {
+                        const page = startPage + i;
+                        let url = `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_genres=${genreParam}&language=ru-RU&sort_by=${randomSort}&page=${page}&include_adult=false&vote_average.gte=5&primary_release_date.gte=${minYear}-01-01`;
 
                         // Add country filter if selected
                         if (countryParam) {
@@ -1853,7 +1885,7 @@
                     console.log(`Fetching detailed info for ${moviePromises.length} movies...`);
                     const allMovieDetails = await Promise.all(moviePromises);
 
-                    // Filter out null values and take only requested amount
+                    // Filter out null values
                     const filteredMovies = allMovieDetails.filter(movie => movie !== null);
 
                     console.log(`Loaded ${filteredMovies.length} movies after language filtering`);
@@ -1863,8 +1895,10 @@
                         showToast('Не удалось загрузить фильмы из TMDB. Используются демо-фильмы.', 'error', 5000);
                         // Keep demo movies as fallback
                     } else {
-                        movies = filteredMovies.slice(0, movieCount);
-                        console.log(`Successfully loaded ${movies.length} real movies from TMDB`);
+                        // Shuffle the array for randomness
+                        const shuffled = filteredMovies.sort(() => Math.random() - 0.5);
+                        movies = shuffled.slice(0, movieCount);
+                        console.log(`Successfully loaded ${movies.length} real movies from TMDB (shuffled)`);
                     }
                 } catch (error) {
                     console.error('Error fetching movies:', error);
@@ -2106,52 +2140,71 @@
             // Clean up all listeners from swipe phase
             cleanupAllListeners();
 
+            // Mark ourselves as finished in Firebase
+            if (database && sessionId) {
+                const finishedKey = isHost ? 'hostFinished' : 'partnerFinished';
+                await database.ref(`sessions/${sessionId}/${finishedKey}`).set(true);
+                console.log('Marked as finished in Firebase');
+            }
+
             // Wait for partner to finish if needed
             if (database && sessionId) {
                 showScreen('linkScreen');
                 document.querySelector('.session-info h2').textContent = 'Ожидание партнера...';
 
                 const partnerChoicesKey = isHost ? 'partnerChoices' : 'hostChoices';
+                const partnerFinishedKey = isHost ? 'partnerFinished' : 'hostFinished';
                 const partnerRef = database.ref(`sessions/${sessionId}/${partnerChoicesKey}`);
+                const partnerFinishedRef = database.ref(`sessions/${sessionId}/${partnerFinishedKey}`);
 
                 // First, check current state (partner might have already finished)
                 try {
-                    const snapshot = await partnerRef.once('value');
-                    partnerChoices = snapshot.val() || {};
+                    const [choicesSnapshot, finishedSnapshot] = await Promise.all([
+                        partnerRef.once('value'),
+                        partnerFinishedRef.once('value')
+                    ]);
+
+                    partnerChoices = choicesSnapshot.val() || {};
+                    const partnerFinished = finishedSnapshot.val();
 
                     // If partner already finished, show matches immediately
-                    if (Object.keys(partnerChoices).length >= movies.length) {
+                    if (partnerFinished === true || Object.keys(partnerChoices).length >= movies.length) {
                         console.log('Partner already finished, showing matches');
                         showMatches();
                         return;
                     }
                 } catch (error) {
-                    console.error('Error checking partner choices:', error);
+                    console.error('Error checking partner status:', error);
                 }
 
-                // Partner hasn't finished yet, set up listener
+                // Partner hasn't finished yet, set up listener for finished flag
                 let matchesShown = false;
-                const checkPartnerCallback = (snapshot) => {
-                    partnerChoices = snapshot.val() || {};
-                    if (Object.keys(partnerChoices).length >= movies.length && !matchesShown) {
+                const checkPartnerFinishedCallback = (snapshot) => {
+                    const partnerFinished = snapshot.val();
+                    if (partnerFinished === true && !matchesShown) {
                         matchesShown = true;
-                        partnerRef.off('value', checkPartnerCallback);
+                        partnerFinishedRef.off('value', checkPartnerFinishedCallback);
                         activeFirebaseListeners = activeFirebaseListeners.filter(
-                            listener => listener.callback !== checkPartnerCallback
+                            listener => listener.callback !== checkPartnerFinishedCallback
                         );
-                        showMatches();
+                        console.log('Partner finished flag detected, loading choices and showing matches');
+                        // Load partner choices and show matches
+                        partnerRef.once('value').then(choicesSnapshot => {
+                            partnerChoices = choicesSnapshot.val() || {};
+                            showMatches();
+                        });
                     }
                 };
 
-                addFirebaseListener(partnerRef, 'value', checkPartnerCallback);
+                addFirebaseListener(partnerFinishedRef, 'value', checkPartnerFinishedCallback);
 
                 // Add timeout after 5 minutes
                 setTimeout(() => {
                     if (!matchesShown) {
                         matchesShown = true;
-                        partnerRef.off('value', checkPartnerCallback);
+                        partnerFinishedRef.off('value', checkPartnerFinishedCallback);
                         activeFirebaseListeners = activeFirebaseListeners.filter(
-                            listener => listener.callback !== checkPartnerCallback
+                            listener => listener.callback !== checkPartnerFinishedCallback
                         );
                         alert('Время ожидания партнера истекло. Попробуйте создать новую сессию.');
                         startOver();
@@ -2470,6 +2523,28 @@
                 screen.classList.remove('active');
             });
             document.getElementById(screenId).classList.add('active');
+            updateSessionCodeDisplay();
+        }
+
+        function updateSessionCodeDisplay() {
+            if (!sessionId) return;
+
+            // Update all session code displays
+            const displays = [
+                { element: 'sessionCodeLink', text: 'sessionCodeTextLink' },
+                { element: 'sessionCodeDisplay', text: 'sessionCodeText' },
+                { element: 'sessionCodeResults', text: 'sessionCodeTextResults' },
+                { element: 'sessionCodeFinal', text: 'sessionCodeTextFinal' }
+            ];
+
+            displays.forEach(display => {
+                const element = document.getElementById(display.element);
+                const textElement = document.getElementById(display.text);
+                if (element && textElement) {
+                    element.style.display = 'block';
+                    textElement.textContent = sessionId;
+                }
+            });
         }
 
         function generateSessionId() {
