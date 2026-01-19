@@ -1904,6 +1904,9 @@
                 // Save movies to Firebase so partner can read them
                 if (database) {
                     console.log('Host: Saving movies to Firebase...');
+                    console.log('Host: Movies to save:', movies.length, 'movies');
+                    console.log('Host: First 3 movie IDs:', movies.slice(0, 3).map(m => m.id));
+                    console.log('Host: First movie title:', movies[0]?.title);
                     try {
                         await firebaseManager.update(`sessions/${sessionId}`, {
                             movies: movies,
@@ -2019,8 +2022,12 @@
                     // Check if movies already loaded
                     if (sessionData.moviesReady && sessionData.movies) {
                         console.log('Partner: Movies already loaded by host, using them');
+                        console.log('Partner: sessionData.movies length:', sessionData.movies.length);
+                        console.log('Partner: sessionData.movies type:', typeof sessionData.movies, Array.isArray(sessionData.movies));
                         movies = sessionData.movies;
                         console.log('Partner: Loaded', movies.length, 'movies from Firebase');
+                        console.log('Partner: First 3 movie IDs:', movies.slice(0, 3).map(m => m.id));
+                        console.log('Partner: First movie title:', movies[0]?.title);
                         startSwipePhase();
                     } else {
                         // Movies not ready yet, wait for them
@@ -2044,8 +2051,12 @@
                                 // Read movies from Firebase
                                 const moviesData = await firebaseManager.read(`sessions/${sessionId}/movies`);
                                 if (moviesData) {
+                                    console.log('Partner: moviesData length:', moviesData.length);
+                                    console.log('Partner: moviesData type:', typeof moviesData, Array.isArray(moviesData));
                                     movies = moviesData;
-                                    console.log('Partner: Loaded', movies.length, 'movies from Firebase');
+                                    console.log('Partner: Loaded', movies.length, 'movies from Firebase (listener)');
+                                    console.log('Partner: First 3 movie IDs:', movies.slice(0, 3).map(m => m.id));
+                                    console.log('Partner: First movie title:', movies[0]?.title);
                                     startSwipePhase();
                                 } else {
                                     console.error('Partner: Failed to load movies from Firebase');
@@ -2310,6 +2321,10 @@
 
         function startSwipePhase() {
             console.log('Starting swipe phase, state:', SessionState.SWIPING);
+            console.log('startSwipePhase: movies count:', movies.length);
+            console.log('startSwipePhase: First 3 movie IDs:', movies.slice(0, 3).map(m => m.id));
+            console.log('startSwipePhase: isHost:', isHost);
+
             const transitioned = sessionManager.transitionTo(SessionState.SWIPING);
             if (!transitioned) {
                 console.error('Failed to transition to SWIPING');
