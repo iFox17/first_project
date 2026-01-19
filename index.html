@@ -1372,7 +1372,7 @@
             const slider = document.getElementById('movieCountSlider');
             const valueDisplay = document.getElementById('movieCountValue');
             slider.oninput = () => {
-                movieCount = slider.value;
+                movieCount = parseInt(slider.value);
                 valueDisplay.textContent = movieCount;
             };
 
@@ -1380,7 +1380,7 @@
             const yearSlider = document.getElementById('yearSlider');
             const yearValue = document.getElementById('yearValue');
             yearSlider.oninput = () => {
-                minYear = yearSlider.value;
+                minYear = parseInt(yearSlider.value);
                 yearValue.textContent = minYear;
             };
         }
@@ -1838,23 +1838,34 @@
             const movie = movies[currentMovieIndex];
             userChoices[movie.id] = choice === 'like';
 
-            // Save to Firebase
-            if (database && sessionId) {
-                const choicesKey = isHost ? 'hostChoices' : 'partnerChoices';
-                database.ref(`sessions/${sessionId}/${choicesKey}/${movie.id}`).set(choice === 'like');
-            }
+            // Save to Firebase and wait for completion
+            const savePromise = (database && sessionId)
+                ? new Promise((resolve) => {
+                    const choicesKey = isHost ? 'hostChoices' : 'partnerChoices';
+                    database.ref(`sessions/${sessionId}/${choicesKey}/${movie.id}`)
+                        .set(choice === 'like')
+                        .then(() => resolve())
+                        .catch(() => resolve()); // Resolve anyway to not block UI
+                  })
+                : Promise.resolve();
 
             const card = document.getElementById('currentCard');
             if (card) {
                 const direction = choice === 'like' ? 1 : -1;
                 card.style.transform = `translateX(${direction * 1000}px) rotate(${direction * 50}deg)`;
                 setTimeout(() => {
-                    currentMovieIndex++;
-                    renderCurrentCard();
+                    // Wait for Firebase write to complete before proceeding
+                    savePromise.then(() => {
+                        currentMovieIndex++;
+                        renderCurrentCard();
+                    });
                 }, 300);
             } else {
-                currentMovieIndex++;
-                renderCurrentCard();
+                // Wait for Firebase write to complete before proceeding
+                savePromise.then(() => {
+                    currentMovieIndex++;
+                    renderCurrentCard();
+                });
             }
         }
 
