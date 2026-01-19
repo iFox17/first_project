@@ -1355,6 +1355,17 @@
         let selectedMovieId = null; // User's final choice
         let isConfirmed = false; // Whether user confirmed their choice
 
+        // Session state machine to prevent race conditions
+        const SessionState = {
+            SETUP: 'setup',
+            SWIPING: 'swiping',
+            WAITING_FOR_MATCHES: 'waiting_for_matches',
+            SELECTING: 'selecting',
+            WAITING_FOR_SELECTION: 'waiting_for_selection',
+            FINAL: 'final'
+        };
+        let currentSessionState = SessionState.SETUP;
+
         // Cleanup references
         let activeEventListeners = [];
         let activeFirebaseListeners = [];
@@ -1820,6 +1831,8 @@
         }
 
         function startSwipePhase() {
+            console.log('Starting swipe phase, state:', SessionState.SWIPING);
+            currentSessionState = SessionState.SWIPING;
             showScreen('swipeScreen');
 
             // Display session code if available
@@ -1836,6 +1849,7 @@
             }).join('');
 
             // Listen for partner completion if in Firebase mode
+            // This listener will be cleaned up when we enter WAITING_FOR_MATCHES state
             if (database && sessionId) {
                 const partnerChoicesKey = isHost ? 'partnerChoices' : 'hostChoices';
                 addFirebaseListener(
@@ -1843,7 +1857,10 @@
                     'value',
                     (snapshot) => {
                         const choices = snapshot.val() || {};
-                        if (Object.keys(choices).length >= movies.length && currentMovieIndex < movies.length) {
+                        // Only show partner status if we're still in SWIPING state
+                        if (currentSessionState === SessionState.SWIPING &&
+                            Object.keys(choices).length >= movies.length &&
+                            currentMovieIndex < movies.length) {
                             document.getElementById('partnerStatus').classList.add('show');
                         }
                     }
@@ -2028,6 +2045,18 @@
         }
 
         async function checkMatches() {
+            // Guard: prevent re-entry if we already moved past SWIPING
+            if (currentSessionState !== SessionState.SWIPING) {
+                console.log('checkMatches() called but already in state:', currentSessionState, '- ignoring');
+                return;
+            }
+
+            console.log('checkMatches() - transitioning to WAITING_FOR_MATCHES');
+            currentSessionState = SessionState.WAITING_FOR_MATCHES;
+
+            // Clean up all listeners from swipe phase
+            cleanupAllListeners();
+
             // Wait for partner to finish if needed
             if (database && sessionId) {
                 showScreen('linkScreen');
@@ -2089,6 +2118,9 @@
         }
 
         function showMatches() {
+            console.log('showMatches() - transitioning to SELECTING');
+            currentSessionState = SessionState.SELECTING;
+
             const matches = movies.filter(movie =>
                 userChoices[movie.id] === true && partnerChoices[movie.id] === true
             );
@@ -2174,6 +2206,15 @@
         }
 
         async function waitForPartnerSelection() {
+            // Guard: prevent re-entry if we already moved past SELECTING
+            if (currentSessionState !== SessionState.SELECTING) {
+                console.log('waitForPartnerSelection() called but already in state:', currentSessionState, '- ignoring');
+                return;
+            }
+
+            console.log('waitForPartnerSelection() - transitioning to WAITING_FOR_SELECTION');
+            currentSessionState = SessionState.WAITING_FOR_SELECTION;
+
             const movie = matchedMovies.find(m => m.id === selectedMovieId);
             if (!movie) return;
 
@@ -2254,6 +2295,12 @@
         }
 
         function showFinalChoice(movie) {
+            console.log('showFinalChoice() - transitioning to FINAL');
+            currentSessionState = SessionState.FINAL;
+
+            // Clean up all remaining listeners - we're done!
+            cleanupAllListeners();
+
             showScreen('finalScreen');
             const posterContent = movie.poster.startsWith('http')
                 ? `<img src="${escapeHtml(movie.poster)}" class="final-poster" alt="${escapeHtml(movie.title)}">`
