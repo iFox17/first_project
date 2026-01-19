@@ -217,6 +217,60 @@
             transform: translateY(-3px) scale(1.08);
         }
 
+        .language-options {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .language-checkbox {
+            flex: 1;
+            min-width: 140px;
+            background: rgba(255, 255, 255, 0.15);
+            border: 2px solid transparent;
+            padding: 16px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .language-checkbox:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .language-checkbox input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            accent-color: #fff;
+        }
+
+        .language-checkbox span {
+            font-size: 16px;
+            font-weight: 500;
+            color: #fff;
+            user-select: none;
+        }
+
+        .language-checkbox input[type="checkbox"]:checked + span {
+            font-weight: 600;
+        }
+
+        .language-checkbox:has(input:checked) {
+            background: rgba(255, 255, 255, 0.95);
+            border-color: #fff;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .language-checkbox:has(input:checked) span {
+            color: #667eea;
+        }
+
         .btn {
             width: 100%;
             background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
@@ -1102,6 +1156,28 @@
                 </div>
 
                 <div class="setup-section">
+                    <h3>Языки озвучки/субтитров</h3>
+                    <div class="language-options">
+                        <label class="language-checkbox">
+                            <input type="checkbox" id="langRussian" value="rus" checked>
+                            <span>🇷🇺 Русский</span>
+                        </label>
+                        <label class="language-checkbox">
+                            <input type="checkbox" id="langEnglish" value="eng" checked>
+                            <span>🇬🇧 Английский</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="setup-section">
+                    <h3>Минимальный рейтинг</h3>
+                    <div class="slider-container">
+                        <input type="range" min="5.0" max="9.0" step="0.5" value="7.0" class="slider" id="ratingSlider">
+                        <div class="slider-value" id="ratingValue">⭐ 7.0+</div>
+                    </div>
+                </div>
+
+                <div class="setup-section">
                     <h3>Не раньше какого года</h3>
                     <div class="slider-container">
                         <input type="range" min="1970" max="2025" value="2000" class="slider" id="yearSlider">
@@ -1699,6 +1775,8 @@
                     isHost: false,
                     selectedGenres: [],
                     selectedCountries: [],
+                    selectedLanguages: ['rus', 'eng'], // Default both languages selected
+                    minRating: 7.0, // Default minimum rating
                     movieCount: 20,
                     minYear: 2000,
                     movies: [],
@@ -1792,6 +1870,8 @@
                     isHost: false,
                     selectedGenres: [],
                     selectedCountries: [],
+                    selectedLanguages: ['rus', 'eng'], // Default both languages selected
+                    minRating: 7.0, // Default minimum rating
                     movieCount: 20,
                     minYear: 2000,
                     movies: [],
@@ -1841,6 +1921,14 @@
         Object.defineProperty(window, 'minYear', {
             get: () => sessionManager.get('minYear'),
             set: (value) => sessionManager.set('minYear', value)
+        });
+        Object.defineProperty(window, 'selectedLanguages', {
+            get: () => sessionManager.get('selectedLanguages'),
+            set: (value) => sessionManager.set('selectedLanguages', value)
+        });
+        Object.defineProperty(window, 'minRating', {
+            get: () => sessionManager.get('minRating'),
+            set: (value) => sessionManager.set('minRating', value)
         });
         Object.defineProperty(window, 'movies', {
             get: () => sessionManager.get('movies'),
@@ -1982,6 +2070,28 @@
                 minYear = parseInt(yearSlider.value);
                 yearValue.textContent = minYear;
             };
+
+            // Setup language checkboxes
+            const langRussian = document.getElementById('langRussian');
+            const langEnglish = document.getElementById('langEnglish');
+
+            function updateSelectedLanguages() {
+                const langs = [];
+                if (langRussian.checked) langs.push('rus');
+                if (langEnglish.checked) langs.push('eng');
+                selectedLanguages = langs;
+            }
+
+            langRussian.onchange = updateSelectedLanguages;
+            langEnglish.onchange = updateSelectedLanguages;
+
+            // Setup rating slider
+            const ratingSlider = document.getElementById('ratingSlider');
+            const ratingValue = document.getElementById('ratingValue');
+            ratingSlider.oninput = () => {
+                minRating = parseFloat(ratingSlider.value);
+                ratingValue.textContent = `⭐ ${minRating.toFixed(1)}+`;
+            };
         }
 
         function toggleGenre(genreId, btn) {
@@ -2009,6 +2119,11 @@
         async function createSession() {
             if (selectedGenres.length === 0) {
                 alert('Выберите хотя бы один жанр!');
+                return;
+            }
+
+            if (selectedLanguages.length === 0) {
+                alert('Выберите хотя бы один язык!');
                 return;
             }
 
@@ -2042,6 +2157,8 @@
                     const success = await firebaseManager.write(`sessions/${sessionId}`, {
                         genres: selectedGenres,
                         countries: selectedCountries,
+                        languages: selectedLanguages,
+                        minRating: minRating,
                         movieCount: movieCount,
                         minYear: minYear,
                         host: true,
@@ -2214,6 +2331,8 @@
 
                     selectedGenres = sessionData.genres;
                     selectedCountries = sessionData.countries || [];
+                    selectedLanguages = sessionData.languages || ['rus', 'eng'];
+                    minRating = sessionData.minRating || 7.0;
                     movieCount = sessionData.movieCount;
                     minYear = sessionData.minYear || 2000;
                     isHost = false;
@@ -2333,6 +2452,8 @@
             console.log('Filtering embedded movies with user preferences...');
             console.log('Selected genres:', selectedGenres);
             console.log('Selected countries:', selectedCountries);
+            console.log('Selected languages:', selectedLanguages);
+            console.log('Min rating:', minRating);
             console.log('Min year:', minYear);
             console.log('Movie count:', movieCount);
 
@@ -2348,6 +2469,14 @@
                 // Check year filter
                 const movieYear = parseInt(movie.year);
                 if (movieYear < minYear) return false;
+
+                // Check rating filter
+                const movieRating = parseFloat(movie.rating);
+                if (movieRating < minRating) return false;
+
+                // Check language filter - movie must have at least one selected language
+                const hasMatchingLanguage = movie.languages.some(lang => selectedLanguages.includes(lang));
+                if (!hasMatchingLanguage) return false;
 
                 // Check if movie has at least one selected genre
                 const hasMatchingGenre = selectedGenreNames.some(genreName =>
@@ -2422,7 +2551,7 @@
                 // Fetch multiple pages if needed
                 for (let i = 0; i < Math.min(pagesNeeded, 10); i++) {
                     const page = startPage + i;
-                    let url = `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_genres=${genreParam}&language=ru-RU&sort_by=${randomSort}&page=${page}&include_adult=false&vote_average.gte=5&primary_release_date.gte=${minYear}-01-01`;
+                    let url = `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_genres=${genreParam}&language=ru-RU&sort_by=${randomSort}&page=${page}&include_adult=false&vote_average.gte=${minRating}&primary_release_date.gte=${minYear}-01-01`;
 
                     // Add country filter if selected
                     if (countryParam) {
@@ -2434,10 +2563,10 @@
                     const data = await response.json();
                     console.log(`Page ${page} returned ${data.results && data.results.length ? data.results.length : 0} movies`);
 
-                    // Filter movies with rating >= 5 and year >= minYear
+                    // Filter movies with rating >= minRating and year >= minYear
                     const filteredResults = data.results.filter(movie => {
                         const year = movie.release_date ? parseInt(movie.release_date.split('-')[0]) : 0;
-                        return movie.vote_average >= 5 && year >= minYear;
+                        return movie.vote_average >= minRating && year >= minYear;
                     });
                     console.log(`After filtering: ${filteredResults.length} movies`);
                     allMovies.push(...filteredResults);
@@ -2494,9 +2623,14 @@
                     }
                 }).filter(movie => movie !== null);
 
-                console.log(`Loaded ${filteredMovies.length} movies after language filtering`);
+                // Filter by selected languages - keep movies that have at least one selected language
+                const languageFilteredMovies = filteredMovies.filter(movie => {
+                    return movie.languages.some(lang => selectedLanguages.includes(lang));
+                });
 
-                if (filteredMovies.length === 0) {
+                console.log(`Loaded ${languageFilteredMovies.length} movies after language filtering (from ${filteredMovies.length})`);
+
+                if (languageFilteredMovies.length === 0) {
                     // No movies found - retry if we haven't exceeded max retries
                     if (retryCount < maxRetries) {
                         console.warn(`No movies found. Retrying... (${retryCount + 1}/${maxRetries})`);
@@ -2512,7 +2646,7 @@
                     }
                 } else {
                     // Shuffle the array for randomness
-                    const shuffled = filteredMovies.sort(() => Math.random() - 0.5);
+                    const shuffled = languageFilteredMovies.sort(() => Math.random() - 0.5);
                     movies = shuffled.slice(0, movieCount);
                     console.log(`Successfully loaded ${movies.length} real movies from TMDB (shuffled)`);
                 }
@@ -3272,6 +3406,8 @@
                     currentState: currentSessionState,
                     selectedGenres: selectedGenres,
                     selectedCountries: selectedCountries,
+                    selectedLanguages: selectedLanguages,
+                    minRating: minRating,
                     minYear: minYear,
                     movieCount: movieCount,
                     userChoices: userChoices,
