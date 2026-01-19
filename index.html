@@ -104,6 +104,9 @@
             border-radius: 20px;
             padding: 30px;
             margin-top: 20px;
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+            overflow-x: hidden;
         }
 
         .setup-section {
@@ -1371,16 +1374,20 @@
 
         // Validate Firebase session data
         function validateSessionData(sessionData) {
+            console.log('[validateSessionData] Validating session data:', JSON.stringify(sessionData, null, 2));
+
             if (!sessionData || typeof sessionData !== 'object') {
                 throw new Error('Неверный формат данных сессии');
             }
 
             // Validate genres
+            console.log('[validateSessionData] Checking genres:', sessionData.genres, 'isArray:', Array.isArray(sessionData.genres));
             if (!Array.isArray(sessionData.genres) || sessionData.genres.length === 0) {
                 throw new Error('Отсутствуют или неверные жанры');
             }
 
             // Validate all genre IDs are numbers
+            console.log('[validateSessionData] Checking genre types:', sessionData.genres.map(id => typeof id));
             if (!sessionData.genres.every(id => typeof id === 'number')) {
                 throw new Error('Неверный формат ID жанров');
             }
@@ -2154,7 +2161,7 @@
                 updateSessionCodeDisplay();
 
                 try {
-                    const success = await firebaseManager.write(`sessions/${sessionId}`, {
+                    const sessionDataToSave = {
                         genres: selectedGenres,
                         countries: selectedCountries,
                         languages: selectedLanguages,
@@ -2166,12 +2173,16 @@
                         hostChoices: {},
                         partnerChoices: {},
                         created: Date.now()
-                    });
+                    };
+                    console.log('[createSession] Saving session data:', JSON.stringify(sessionDataToSave, null, 2));
+                    console.log('[createSession] selectedGenres:', selectedGenres, 'type:', typeof selectedGenres, 'isArray:', Array.isArray(selectedGenres));
+
+                    const success = await firebaseManager.write(`sessions/${sessionId}`, sessionDataToSave);
 
                     if (!success) {
                         throw new Error('Failed to write session to Firebase');
                     }
-                    console.log('Session created in Firebase:', sessionId);
+                    console.log('[createSession] Session created in Firebase:', sessionId);
                 } catch (error) {
                     console.error('Error creating session in Firebase:', error);
                     alert('Ошибка создания сессии: ' + error.message);
@@ -2317,13 +2328,16 @@
                         return;
                     }
 
-                    console.log('Session data:', sessionData);
+                    console.log('[joinSession] Session data received:', JSON.stringify(sessionData, null, 2));
+                    console.log('[joinSession] Session data keys:', Object.keys(sessionData));
+                    console.log('[joinSession] genres value:', sessionData.genres, 'type:', typeof sessionData.genres, 'isArray:', Array.isArray(sessionData.genres));
 
                     // Validate session data
                     try {
                         validateSessionData(sessionData);
                     } catch (validationError) {
-                        console.error('Session validation failed:', validationError);
+                        console.error('[joinSession] Session validation failed:', validationError);
+                        console.error('[joinSession] Session data that failed:', JSON.stringify(sessionData, null, 2));
                         alert('Некорректные данные сессии: ' + validationError.message);
                         window.location.href = window.location.pathname;
                         return;
