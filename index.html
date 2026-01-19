@@ -1896,6 +1896,20 @@
                     return;
                 }
 
+                // Save movies to Firebase so partner can read them
+                if (database) {
+                    console.log('Host: Saving movies to Firebase...');
+                    try {
+                        await firebaseManager.update(`sessions/${sessionId}`, {
+                            movies: movies,
+                            moviesReady: true
+                        });
+                        console.log('Host: Movies saved to Firebase successfully');
+                    } catch (error) {
+                        console.error('Host: Error saving movies to Firebase:', error);
+                    }
+                }
+
                 // Update status after movies loaded
                 if (database) {
                     document.querySelector('.session-info h2').textContent = 'Сессия создана!';
@@ -1987,10 +2001,66 @@
                     );
                     sessionManager.set('hostChoicesListenerId', hostChoicesListenerId);
 
-                    console.log('Fetching movies as partner...');
-                    await fetchMovies();
-                    console.log('Movies fetched, starting swipe phase as partner');
-                    startSwipePhase();
+                    // Wait for host to load movies and read from Firebase
+                    console.log('Partner: Waiting for host to load movies...');
+                    document.querySelector('.session-info h2').textContent = 'Ожидание загрузки фильмов...';
+                    document.querySelector('.waiting-message p').textContent = 'Хост загружает список фильмов...';
+
+                    // Check if movies already loaded
+                    if (sessionData.moviesReady && sessionData.movies) {
+                        console.log('Partner: Movies already loaded by host, using them');
+                        movies = sessionData.movies;
+                        console.log('Partner: Loaded', movies.length, 'movies from Firebase');
+                        startSwipePhase();
+                    } else {
+                        // Movies not ready yet, wait for them
+                        console.log('Partner: Movies not ready, setting up listener...');
+                        const moviesRef = database.ref(`sessions/${sessionId}/moviesReady`);
+                        let moviesLoaded = false;
+
+                        const moviesReadyCallback = async (snapshot) => {
+                            const ready = snapshot.val();
+                            if (ready === true && !moviesLoaded) {
+                                moviesLoaded = true;
+                                console.log('Partner: Movies ready, loading...');
+
+                                // Remove listener
+                                const listenerId = sessionManager.get('moviesReadyListenerId');
+                                if (listenerId) {
+                                    firebaseManager.removeListener(listenerId);
+                                    sessionManager.set('moviesReadyListenerId', null);
+                                }
+
+                                // Read movies from Firebase
+                                const moviesData = await firebaseManager.read(`sessions/${sessionId}/movies`);
+                                if (moviesData) {
+                                    movies = moviesData;
+                                    console.log('Partner: Loaded', movies.length, 'movies from Firebase');
+                                    startSwipePhase();
+                                } else {
+                                    console.error('Partner: Failed to load movies from Firebase');
+                                    alert('Не удалось загрузить список фильмов. Попробуйте заново.');
+                                    window.location.href = window.location.pathname;
+                                }
+                            }
+                        };
+
+                        const listenerId = firebaseManager.addListener(moviesRef, 'value', moviesReadyCallback);
+                        sessionManager.set('moviesReadyListenerId', listenerId);
+
+                        // Timeout after 30 seconds
+                        setTimeout(() => {
+                            if (!moviesLoaded) {
+                                const listenerId = sessionManager.get('moviesReadyListenerId');
+                                if (listenerId) {
+                                    firebaseManager.removeListener(listenerId);
+                                    sessionManager.set('moviesReadyListenerId', null);
+                                }
+                                alert('Время ожидания загрузки фильмов истекло. Попробуйте заново.');
+                                window.location.href = window.location.pathname;
+                            }
+                        }, 30000);
+                    }
                 } catch (error) {
                     console.error('Error joining session:', error);
                     alert('Ошибка при подключении к сессии: ' + error.message);
