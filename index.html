@@ -490,6 +490,39 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
+            object-position: top; /* Show top of poster, not center */
+        }
+
+        .poster-placeholder {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .poster-emoji {
+            font-size: 80px;
+            margin-bottom: 20px;
+        }
+
+        .poster-title {
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            max-width: 90%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            line-clamp: 3;
+            -webkit-box-orient: vertical;
         }
 
         .movie-rating {
@@ -532,6 +565,32 @@
 
         .language-badge.eng {
             background: rgba(244, 67, 54, 0.9);
+        }
+
+        /* Content type badge (movie/series) */
+        .content-type-badge {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: bold;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .content-type-badge.movie {
+            background: rgba(103, 58, 183, 0.9);
+        }
+
+        .content-type-badge.series {
+            background: rgba(233, 30, 99, 0.9);
         }
 
         .movie-info {
@@ -709,6 +768,29 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
 
+        .match-poster-wrapper {
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .type-badge-small {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .type-badge-small.movie {
+            background: rgba(103, 58, 183, 0.9);
+        }
+
+        .type-badge-small.series {
+            background: rgba(233, 30, 99, 0.9);
+        }
+
         .match-info {
             flex: 1;
         }
@@ -864,6 +946,34 @@
             max-width: 300px;
             border-radius: 15px;
             margin-bottom: 20px;
+        }
+
+        .final-poster-wrapper {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+
+        .final-type-badge {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
+            color: #fff;
+            padding: 8px 14px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: bold;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .final-type-badge.movie {
+            background: rgba(103, 58, 183, 0.9);
+        }
+
+        .final-type-badge.series {
+            background: rgba(233, 30, 99, 0.9);
         }
 
         /* Toast Notifications */
@@ -1137,7 +1247,21 @@
         <div class="screen active" id="setupScreen">
             <div class="setup-container">
                 <div class="setup-section">
-                    <h3>Количество фильмов</h3>
+                    <h3>Тип контента</h3>
+                    <div class="language-options">
+                        <label class="language-checkbox">
+                            <input type="checkbox" id="includeMovies" value="movies" checked>
+                            <span>🎬 Фильмы</span>
+                        </label>
+                        <label class="language-checkbox">
+                            <input type="checkbox" id="includeSeries" value="series">
+                            <span>📺 Сериалы</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="setup-section">
+                    <h3>Количество</h3>
                     <div class="slider-container">
                         <input type="range" min="10" max="100" value="20" class="slider" id="movieCountSlider">
                         <div class="slider-value" id="movieCountValue">20</div>
@@ -1436,7 +1560,7 @@
             return true;
         }
 
-        // Available genres
+        // Available genres (for movies)
         const genres = [
             { id: 28, name: 'Боевик' },
             { id: 35, name: 'Комедия' },
@@ -1446,6 +1570,30 @@
             { id: 878, name: 'Фантастика' },
             { id: 53, name: 'Триллер' },
             { id: 16, name: 'Мультфильм' }
+        ];
+
+        // TV genres mapping (TMDB uses different IDs for TV)
+        // Maps movie genre IDs to corresponding TV genre IDs
+        const tvGenreMapping = {
+            28: 10759,   // Action -> Action & Adventure
+            35: 35,      // Comedy (same)
+            18: 18,      // Drama (same)
+            27: 9648,    // Horror -> Mystery (closest match)
+            10749: 18,   // Romance -> Drama (romance is not separate in TV)
+            878: 10765,  // Sci-Fi -> Sci-Fi & Fantasy
+            53: 80,      // Thriller -> Crime (closest match)
+            16: 16       // Animation (same)
+        };
+
+        // TV genre names for display
+        const tvGenres = [
+            { id: 10759, name: 'Боевик и Приключения' },
+            { id: 35, name: 'Комедия' },
+            { id: 18, name: 'Драма' },
+            { id: 9648, name: 'Детектив' },
+            { id: 10765, name: 'Фантастика' },
+            { id: 80, name: 'Криминал' },
+            { id: 16, name: 'Мультсериал' }
         ];
 
         // Available countries (ISO 3166-1)
@@ -1846,6 +1994,8 @@
                     selectedCountries: [],
                     selectedLanguages: ['rus', 'eng'], // Default both languages selected
                     minRating: 7.0, // Default minimum rating
+                    includeMovies: true, // Include movies in search
+                    includeSeries: false, // Include TV series in search
                     movieCount: 20,
                     minYear: 2000,
                     movies: [],
@@ -1941,6 +2091,8 @@
                     selectedCountries: [],
                     selectedLanguages: ['rus', 'eng'], // Default both languages selected
                     minRating: 7.0, // Default minimum rating
+                    includeMovies: true, // Include movies in search
+                    includeSeries: false, // Include TV series in search
                     movieCount: 20,
                     minYear: 2000,
                     movies: [],
@@ -1998,6 +2150,14 @@
         Object.defineProperty(window, 'minRating', {
             get: () => sessionManager.get('minRating'),
             set: (value) => sessionManager.set('minRating', value)
+        });
+        Object.defineProperty(window, 'includeMovies', {
+            get: () => sessionManager.get('includeMovies'),
+            set: (value) => sessionManager.set('includeMovies', value)
+        });
+        Object.defineProperty(window, 'includeSeries', {
+            get: () => sessionManager.get('includeSeries'),
+            set: (value) => sessionManager.set('includeSeries', value)
         });
         Object.defineProperty(window, 'movies', {
             get: () => sessionManager.get('movies'),
@@ -2161,6 +2321,29 @@
                 minRating = parseFloat(ratingSlider.value);
                 ratingValue.textContent = `⭐ ${minRating.toFixed(1)}+`;
             };
+
+            // Setup content type checkboxes
+            const includeMoviesCheckbox = document.getElementById('includeMovies');
+            const includeSeriesCheckbox = document.getElementById('includeSeries');
+
+            includeMoviesCheckbox.onchange = () => {
+                // Ensure at least one is selected
+                if (!includeMoviesCheckbox.checked && !includeSeriesCheckbox.checked) {
+                    includeMoviesCheckbox.checked = true;
+                    showToast('Необходимо выбрать хотя бы один тип контента', 'warning', 2000);
+                    return;
+                }
+                includeMovies = includeMoviesCheckbox.checked;
+            };
+            includeSeriesCheckbox.onchange = () => {
+                // Ensure at least one is selected
+                if (!includeSeriesCheckbox.checked && !includeMoviesCheckbox.checked) {
+                    includeSeriesCheckbox.checked = true;
+                    showToast('Необходимо выбрать хотя бы один тип контента', 'warning', 2000);
+                    return;
+                }
+                includeSeries = includeSeriesCheckbox.checked;
+            };
         }
 
         function toggleGenre(genreId, btn) {
@@ -2196,12 +2379,19 @@
                 return;
             }
 
+            if (!includeMovies && !includeSeries) {
+                alert('Выберите хотя бы один тип контента (фильмы или сериалы)!');
+                return;
+            }
+
             // IMPORTANT: Save user selections BEFORE reset
             const userSelections = {
                 genres: [...selectedGenres],
                 countries: [...selectedCountries],
                 languages: [...selectedLanguages],
                 minRating: minRating,
+                includeMovies: includeMovies,
+                includeSeries: includeSeries,
                 movieCount: movieCount,
                 minYear: minYear
             };
@@ -2217,6 +2407,8 @@
             selectedCountries = userSelections.countries;
             selectedLanguages = userSelections.languages;
             minRating = userSelections.minRating;
+            includeMovies = userSelections.includeMovies;
+            includeSeries = userSelections.includeSeries;
             movieCount = userSelections.movieCount;
             minYear = userSelections.minYear;
             console.log('[createSession] Restored user selections after reset:', {
@@ -2224,6 +2416,8 @@
                 selectedCountries,
                 selectedLanguages,
                 minRating,
+                includeMovies,
+                includeSeries,
                 movieCount,
                 minYear
             });
@@ -2255,6 +2449,8 @@
                         countries: selectedCountries,
                         languages: selectedLanguages,
                         minRating: minRating,
+                        includeMovies: includeMovies,
+                        includeSeries: includeSeries,
                         movieCount: movieCount,
                         minYear: minYear,
                         host: true,
@@ -2264,7 +2460,6 @@
                         created: Date.now()
                     };
                     console.log('[createSession] Saving session data:', JSON.stringify(sessionDataToSave, null, 2));
-                    console.log('[createSession] selectedGenres:', selectedGenres, 'type:', typeof selectedGenres, 'isArray:', Array.isArray(selectedGenres));
 
                     const success = await firebaseManager.write(`sessions/${sessionId}`, sessionDataToSave);
 
@@ -2436,6 +2631,8 @@
                     selectedCountries = sessionData.countries || [];
                     selectedLanguages = sessionData.languages || ['rus', 'eng'];
                     minRating = sessionData.minRating || 7.0;
+                    includeMovies = sessionData.includeMovies !== false; // Default true
+                    includeSeries = sessionData.includeSeries || false;
                     movieCount = sessionData.movieCount;
                     minYear = sessionData.minYear || 2000;
                     isHost = false;
@@ -2612,18 +2809,25 @@
             }
 
             console.log(`Returning ${result.length} embedded movies`);
-            return result;
+            // Add type field to all embedded movies (they are all movies, not series)
+            return result.map(movie => ({ ...movie, type: 'movie' }));
         }
 
         async function fetchMovies(retryCount = 0, maxRetries = 3) {
-            console.log(`fetchMovies() attempt ${retryCount + 1}/${maxRetries + 1} with ${movieCount} movies requested`);
+            const shouldFetchMovies = sessionManager.get('includeMovies');
+            const shouldFetchSeries = sessionManager.get('includeSeries');
+
+            console.log(`fetchMovies() attempt ${retryCount + 1}/${maxRetries + 1} with ${movieCount} items requested`);
+            console.log(`[fetchMovies] Fetching: movies=${shouldFetchMovies}, series=${shouldFetchSeries}`);
 
             // Update loading message with retry info
             if (document.querySelector('.waiting-message p')) {
+                const contentType = shouldFetchMovies && shouldFetchSeries ? 'контента' :
+                                    shouldFetchSeries ? 'сериалов' : 'фильмов';
                 if (retryCount > 0) {
-                    document.querySelector('.waiting-message p').textContent = `Загрузка фильмов... (попытка ${retryCount + 1}/${maxRetries + 1})`;
+                    document.querySelector('.waiting-message p').textContent = `Загрузка ${contentType}... (попытка ${retryCount + 1}/${maxRetries + 1})`;
                 } else {
-                    document.querySelector('.waiting-message p').textContent = 'Загрузка фильмов...';
+                    document.querySelector('.waiting-message p').textContent = `Загрузка ${contentType}...`;
                 }
             }
 
@@ -2635,20 +2839,18 @@
                 return;
             }
 
-            // Try to fetch real movies from TMDB
-            console.log('TMDB API key found, fetching real movies...');
+            // Try to fetch real content from TMDB
+            console.log('TMDB API key found, fetching content...');
             try {
-                const genreParam = selectedGenres.join(',');
                 const countryParam = selectedCountries.length > 0 ? selectedCountries.join('|') : '';
                 const pagesNeeded = Math.ceil(movieCount / 20);
-                const allMovies = [];
+                const allContent = [];
 
                 // Randomize sorting method for variety
                 const sortOptions = [
                     'popularity.desc',
                     'vote_average.desc',
-                    'vote_count.desc',
-                    'primary_release_date.desc'
+                    'vote_count.desc'
                 ];
                 const randomSort = sortOptions[Math.floor(Math.random() * sortOptions.length)];
                 console.log('Using random sort:', randomSort);
@@ -2657,113 +2859,151 @@
                 const startPage = Math.floor(Math.random() * 10) + 1;
                 console.log('Starting from random page:', startPage);
 
-                // Fetch multiple pages if needed
-                for (let i = 0; i < Math.min(pagesNeeded, 10); i++) {
-                    const page = startPage + i;
-                    let url = `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_genres=${genreParam}&language=ru-RU&sort_by=${randomSort}&page=${page}&include_adult=false&vote_average.gte=${minRating}&primary_release_date.gte=${minYear}-01-01`;
+                // Fetch movies if enabled
+                if (shouldFetchMovies) {
+                    const movieGenreParam = selectedGenres.join(',');
+                    console.log('[fetchMovies] Fetching movies with genres:', movieGenreParam);
 
-                    // Add country filter if selected
-                    if (countryParam) {
-                        url += `&with_origin_country=${countryParam}`;
+                    for (let i = 0; i < Math.min(pagesNeeded, 5); i++) {
+                        const page = startPage + i;
+                        let url = `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_genres=${movieGenreParam}&language=ru-RU&sort_by=${randomSort}&page=${page}&include_adult=false&vote_average.gte=${minRating}&primary_release_date.gte=${minYear}-01-01`;
+
+                        if (countryParam) {
+                            url += `&with_origin_country=${countryParam}`;
+                        }
+
+                        console.log(`Fetching movies page ${page}...`);
+                        const response = await fetchWithRetry(url);
+                        const data = await response.json();
+                        console.log(`Movies page ${page} returned ${data.results?.length || 0} items`);
+
+                        const filteredResults = (data.results || []).filter(movie => {
+                            const year = movie.release_date ? parseInt(movie.release_date.split('-')[0]) : 0;
+                            return movie.vote_average >= minRating && year >= minYear;
+                        }).map(movie => ({ ...movie, _type: 'movie' })); // Add type marker
+
+                        allContent.push(...filteredResults);
+                        if (allContent.length >= movieCount * 1.5) break;
                     }
-
-                    console.log(`Fetching page ${page}...`);
-                    const response = await fetchWithRetry(url);
-                    const data = await response.json();
-                    console.log(`Page ${page} returned ${data.results && data.results.length ? data.results.length : 0} movies`);
-
-                    // Filter movies with rating >= minRating and year >= minYear
-                    const filteredResults = data.results.filter(movie => {
-                        const year = movie.release_date ? parseInt(movie.release_date.split('-')[0]) : 0;
-                        return movie.vote_average >= minRating && year >= minYear;
-                    });
-                    console.log(`After filtering: ${filteredResults.length} movies`);
-                    allMovies.push(...filteredResults);
-
-                    if (allMovies.length >= movieCount * 1.5) break; // Get extra to account for filtering
                 }
-                console.log(`Total movies fetched: ${allMovies.length}`);
 
-                // ✅ OPTIMIZATION: Use data directly from /discover without additional requests
-                // Previously: 20-30 detailed API calls (~60-90 seconds)
-                // Now: 0 additional calls (~0 seconds)
-                console.log(`Processing movie data without additional API calls...`);
+                // Fetch TV series if enabled
+                if (shouldFetchSeries) {
+                    // Map movie genre IDs to TV genre IDs
+                    const tvGenreIds = selectedGenres.map(id => tvGenreMapping[id] || id);
+                    const tvGenreParam = [...new Set(tvGenreIds)].join(','); // Remove duplicates
+                    console.log('[fetchMovies] Fetching TV series with genres:', tvGenreParam);
 
-                const filteredMovies = allMovies.slice(0, movieCount * 1.5).map(movie => {
+                    for (let i = 0; i < Math.min(pagesNeeded, 5); i++) {
+                        const page = startPage + i;
+                        let url = `${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&with_genres=${tvGenreParam}&language=ru-RU&sort_by=${randomSort}&page=${page}&include_adult=false&vote_average.gte=${minRating}&first_air_date.gte=${minYear}-01-01`;
+
+                        if (countryParam) {
+                            url += `&with_origin_country=${countryParam}`;
+                        }
+
+                        console.log(`Fetching TV page ${page}...`);
+                        const response = await fetchWithRetry(url);
+                        const data = await response.json();
+                        console.log(`TV page ${page} returned ${data.results?.length || 0} items`);
+
+                        const filteredResults = (data.results || []).filter(show => {
+                            const year = show.first_air_date ? parseInt(show.first_air_date.split('-')[0]) : 0;
+                            return show.vote_average >= minRating && year >= minYear;
+                        }).map(show => ({ ...show, _type: 'series' })); // Add type marker
+
+                        allContent.push(...filteredResults);
+                        if (allContent.length >= movieCount * 1.5) break;
+                    }
+                }
+
+                console.log(`Total content fetched: ${allContent.length}`);
+
+                // Process all content (movies and series)
+                console.log(`Processing content data...`);
+
+                const processedContent = allContent.slice(0, movieCount * 1.5).map(item => {
                     try {
-                        // Convert genre_ids to genre names using local genres array
-                        const movieGenres = (movie.genre_ids || [])
+                        const isMovie = item._type === 'movie';
+                        const title = isMovie ? item.title : item.name;
+                        const releaseDate = isMovie ? item.release_date : item.first_air_date;
+
+                        // Convert genre_ids to genre names
+                        const genreList = isMovie ? genres : tvGenres;
+                        const itemGenres = (item.genre_ids || [])
                             .map(id => {
-                                const genre = genres.find(g => g.id === id);
-                                return genre ? genre.name : null;
+                                const genre = genreList.find(g => g.id === id);
+                                // Fallback to movie genres for common IDs
+                                if (!genre) {
+                                    const movieGenre = genres.find(g => g.id === id);
+                                    return movieGenre ? movieGenre.name : null;
+                                }
+                                return genre.name;
                             })
                             .filter(name => name !== null);
 
-                        // Determine languages based on original_language and availability
-                        // Since we request with language=ru-RU, all movies have Russian localization
-                        const availableLanguages = [];
-
-                        // ALL movies from TMDB with ru-RU request have Russian subtitles/dubbing available
-                        // This is the whole point of requesting with language=ru-RU
-                        availableLanguages.push('rus');
-
-                        // Add English for movies that are originally in English or very popular
-                        if (movie.original_language === 'en' || movie.vote_count > 50) {
+                        // Determine languages
+                        const availableLanguages = ['rus']; // All content has Russian localization
+                        if (item.original_language === 'en' || item.vote_count > 50) {
                             availableLanguages.push('eng');
                         }
 
-                        console.log(`[fetchMovies] Movie "${movie.title}" languages: [${availableLanguages.join(', ')}] (original: ${movie.original_language}, votes: ${movie.vote_count})`);
-
                         return {
-                            id: movie.id,
-                            title: movie.title,
-                            overview: movie.overview || 'Описание отсутствует',
-                            poster: movie.poster_path ? `${TMDB_IMAGE_BASE}${movie.poster_path}` : '🎬',
-                            rating: movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A',
-                            year: movie.release_date ? movie.release_date.split('-')[0] : 'N/A',
-                            director: 'TMDB', // No director data without detailed request (acceptable tradeoff)
-                            movieGenres: movieGenres,
-                            languages: availableLanguages
+                            id: item.id,
+                            title: title,
+                            overview: item.overview || 'Описание отсутствует',
+                            poster: item.poster_path ? `${TMDB_IMAGE_BASE}${item.poster_path}` : '🎬',
+                            rating: item.vote_average ? item.vote_average.toFixed(1) : 'N/A',
+                            year: releaseDate ? releaseDate.split('-')[0] : 'N/A',
+                            director: 'TMDB',
+                            movieGenres: itemGenres,
+                            languages: availableLanguages,
+                            type: item._type, // 'movie' or 'series'
+                            // Additional fields for series (will be populated later if needed)
+                            episodeCount: null,
+                            seasonCount: null,
+                            runtime: null
                         };
                     } catch (err) {
-                        console.warn('Error processing movie:', movie.title, err);
+                        console.warn('Error processing item:', item.title || item.name, err);
                         return null;
                     }
-                }).filter(movie => movie !== null);
+                }).filter(item => item !== null);
 
-                // Filter by selected languages - keep movies that have at least one selected language
-                const languageFilteredMovies = filteredMovies.filter(movie => {
-                    return movie.languages.some(lang => selectedLanguages.includes(lang));
+                // Filter by selected languages
+                const languageFilteredContent = processedContent.filter(item => {
+                    return item.languages.some(lang => selectedLanguages.includes(lang));
                 });
 
-                console.log(`Loaded ${languageFilteredMovies.length} movies after language filtering (from ${filteredMovies.length})`);
+                console.log(`Loaded ${languageFilteredContent.length} items after language filtering (from ${processedContent.length})`);
 
-                if (languageFilteredMovies.length === 0) {
-                    // No movies found - retry if we haven't exceeded max retries
+                if (languageFilteredContent.length === 0) {
                     if (retryCount < maxRetries) {
-                        console.warn(`No movies found. Retrying... (${retryCount + 1}/${maxRetries})`);
-                        showToast(`Загрузка фильмов не удалась. Повтор ${retryCount + 2}/${maxRetries + 1}...`, 'error', 3000);
-                        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
+                        console.warn(`No content found. Retrying... (${retryCount + 1}/${maxRetries})`);
+                        console.log(`[fetchMovies] Retrying... (${retryCount + 1}/${maxRetries})`);
+                        await new Promise(resolve => setTimeout(resolve, 2000));
                         return await fetchMovies(retryCount + 1, maxRetries);
                     } else {
                         console.error('Max retries exceeded. Using embedded movies database as fallback.');
                         showToast('⚠️ Используем встроенную базу фильмов (TMDB недоступен)', 'warning', 5000);
-                        // Load embedded movies as fallback
                         movies = getFilteredEmbeddedMovies();
                         console.log(`Loaded ${movies.length} embedded movies as fallback`);
                     }
                 } else {
                     // Shuffle the array for randomness
-                    const shuffled = languageFilteredMovies.sort(() => Math.random() - 0.5);
+                    const shuffled = languageFilteredContent.sort(() => Math.random() - 0.5);
                     movies = shuffled.slice(0, movieCount);
-                    console.log(`Successfully loaded ${movies.length} real movies from TMDB (shuffled)`);
+
+                    const movieCount_ = movies.filter(m => m.type === 'movie').length;
+                    const seriesCount = movies.filter(m => m.type === 'series').length;
+                    console.log(`Successfully loaded ${movies.length} items from TMDB (${movieCount_} movies, ${seriesCount} series)`);
 
                     // If we got less than requested, supplement with embedded movies
-                    const MIN_MOVIES = 5; // Minimum movies for a meaningful experience
+                    const MIN_MOVIES = 5;
                     if (movies.length < movieCount || movies.length < MIN_MOVIES) {
                         const needed = Math.max(movieCount - movies.length, MIN_MOVIES - movies.length);
                         if (needed > 0) {
-                            console.log(`[fetchMovies] Got only ${movies.length}/${movieCount} movies from TMDB (min: ${MIN_MOVIES}), supplementing with embedded movies`);
+                            console.log(`[fetchMovies] Got only ${movies.length}/${movieCount} items from TMDB (min: ${MIN_MOVIES}), supplementing with embedded movies`);
                             const embeddedMovies = getFilteredEmbeddedMovies();
                             const existingIds = new Set(movies.map(m => m.id));
                             const additionalMovies = embeddedMovies.filter(m => !existingIds.has(m.id));
@@ -2771,35 +3011,33 @@
                             console.log(`[fetchMovies] Supplemented with ${Math.min(needed, additionalMovies.length)} embedded movies, total: ${movies.length}`);
 
                             if (movies.length < MIN_MOVIES) {
-                                console.warn(`[fetchMovies] Still only ${movies.length} movies, adding more from full embedded database`);
+                                console.warn(`[fetchMovies] Still only ${movies.length} items, adding more from full embedded database`);
                                 const allEmbedded = embeddedMovies.sort(() => Math.random() - 0.5);
                                 const moreNeeded = MIN_MOVIES - movies.length;
                                 const moreMovies = allEmbedded.filter(m => !existingIds.has(m.id)).slice(0, moreNeeded);
                                 movies = [...movies, ...moreMovies];
-                                console.log(`[fetchMovies] Final movie count: ${movies.length}`);
+                                console.log(`[fetchMovies] Final content count: ${movies.length}`);
                             }
                         }
                     }
                 }
             } catch (error) {
-                console.error('Error fetching movies:', error);
+                console.error('Error fetching content:', error);
 
-                // Retry if we haven't exceeded max retries
                 if (retryCount < maxRetries) {
                     console.log(`Retrying after error... (${retryCount + 1}/${maxRetries})`);
-                    showToast(`Ошибка загрузки: ${error.message}. Повтор ${retryCount + 2}/${maxRetries + 1}...`, 'error', 3000);
-                    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
+                    console.log(`[fetchMovies] Error: ${error.message}. Retrying... (${retryCount + 1}/${maxRetries})`);
+                    await new Promise(resolve => setTimeout(resolve, 2000));
                     return await fetchMovies(retryCount + 1, maxRetries);
                 } else {
                     console.error('Max retries exceeded after errors. Using embedded movies database as fallback.');
                     showToast('⚠️ Используем встроенную базу фильмов (TMDB недоступен)', 'warning', 5000);
-                    // Load embedded movies as fallback
                     movies = getFilteredEmbeddedMovies();
                     console.log(`Loaded ${movies.length} embedded movies as fallback after errors`);
                 }
             }
 
-            console.log('fetchMovies() completed. Total movies:', movies.length);
+            console.log('fetchMovies() completed. Total items:', movies.length);
         }
 
         function startSwipePhase() {
@@ -2873,13 +3111,28 @@
                    </div>`
                 : '';
 
-            const posterContent = movie.poster.startsWith('http')
+            // Content type badge (movie or series)
+            const contentType = movie.type || 'movie';
+            const typeBadge = contentType === 'series'
+                ? `<div class="content-type-badge series">📺 Сериал</div>`
+                : `<div class="content-type-badge movie">🎬 Фильм</div>`;
+
+            const posterContent = movie.poster && movie.poster.startsWith('http')
                 ? `<div class="movie-poster">
-                    <img src="${escapeHtml(movie.poster)}" alt="${escapeHtml(movie.title)}">
+                    <img src="${escapeHtml(movie.poster)}" alt="${escapeHtml(movie.title)}" onerror="this.parentElement.innerHTML='<div class=\\'poster-placeholder\\'><span class=\\'poster-emoji\\'>${movie.poster || '🎬'}</span><span class=\\'poster-title\\'>${escapeHtml(movie.title)}</span></div>'">
+                    ${typeBadge}
                     ${languageBadges}
                     ${movie.rating !== 'N/A' ? `<div class="movie-rating">⭐ ${escapeHtml(movie.rating)}</div>` : ''}
                    </div>`
-                : `<div class="movie-poster">${movie.poster}</div>`;
+                : `<div class="movie-poster">
+                    <div class="poster-placeholder">
+                        <span class="poster-emoji">${movie.poster || '🎬'}</span>
+                        <span class="poster-title">${escapeHtml(movie.title)}</span>
+                    </div>
+                    ${typeBadge}
+                    ${languageBadges}
+                    ${movie.rating !== 'N/A' ? `<div class="movie-rating">⭐ ${escapeHtml(movie.rating)}</div>` : ''}
+                   </div>`;
 
             const genresHtml = movie.movieGenres && movie.movieGenres.length > 0
                 ? `<div class="movie-genres">${movie.movieGenres.slice(0, 3).map(g => `<span class="movie-genre">${escapeHtml(g)}</span>`).join('')}</div>`
@@ -3034,95 +3287,119 @@
                 return;
             }
 
-            console.log('checkMatches() - transitioning to WAITING_FOR_MATCHES');
+            console.log('[checkMatches] Starting - transitioning to WAITING_FOR_MATCHES');
             const transitioned = sessionManager.transitionTo(SessionState.WAITING_FOR_MATCHES);
             if (!transitioned) {
-                console.error('Failed to transition to WAITING_FOR_MATCHES');
+                console.error('[checkMatches] Failed to transition to WAITING_FOR_MATCHES');
                 return;
             }
 
-            // Clean up all listeners from swipe phase
-            cleanupAllListeners();
-
-            // Mark ourselves as finished in Firebase
-            if (database && sessionId) {
-                const finishedKey = isHost ? 'hostFinished' : 'partnerFinished';
-                await firebaseManager.write(`sessions/${sessionId}/${finishedKey}`, true);
-                console.log('Marked as finished in Firebase');
+            // Clean up swipe phase listeners (but not all - we'll add new ones)
+            if (currentCardCleanup) {
+                currentCardCleanup();
+                currentCardCleanup = null;
+            }
+            // Remove only the swipe phase listener
+            const swipeListenerId = sessionManager.get('partnerChoicesSwipeListenerId');
+            if (swipeListenerId) {
+                firebaseManager.removeListener(swipeListenerId);
+                sessionManager.set('partnerChoicesSwipeListenerId', null);
             }
 
-            // Wait for partner to finish if needed
-            if (database && sessionId) {
-                showScreen('linkScreen');
-                document.querySelector('.session-info h2').textContent = 'Ожидание партнера...';
-
-                const partnerChoicesKey = isHost ? 'partnerChoices' : 'hostChoices';
-                const partnerFinishedKey = isHost ? 'partnerFinished' : 'hostFinished';
-
-                // First, check current state (partner might have already finished)
-                try {
-                    const [choices, finished] = await Promise.all([
-                        firebaseManager.read(`sessions/${sessionId}/${partnerChoicesKey}`),
-                        firebaseManager.read(`sessions/${sessionId}/${partnerFinishedKey}`)
-                    ]);
-
-                    partnerChoices = choices || {};
-                    const partnerFinished = finished;
-
-                    // If partner already finished, show matches immediately
-                    if (partnerFinished === true || Object.keys(partnerChoices).length >= movies.length) {
-                        console.log('Partner already finished, showing matches');
-                        showMatches();
-                        return;
-                    }
-                } catch (error) {
-                    console.error('Error checking partner status:', error);
-                }
-
-                // Partner hasn't finished yet, set up listener for finished flag
-                let matchesShown = false;
-                const partnerFinishedRef = database.ref(`sessions/${sessionId}/${partnerFinishedKey}`);
-                const checkPartnerFinishedCallback = (snapshot) => {
-                    const partnerFinished = snapshot.val();
-                    if (partnerFinished === true && !matchesShown) {
-                        matchesShown = true;
-                        const listenerId = sessionManager.get('partnerFinishedListenerId');
-                        if (listenerId) {
-                            firebaseManager.removeListener(listenerId);
-                            sessionManager.set('partnerFinishedListenerId', null);
-                        }
-                        console.log('Partner finished flag detected, loading choices and showing matches');
-                        // Load partner choices and show matches
-                        firebaseManager.read(`sessions/${sessionId}/${partnerChoicesKey}`).then(choices => {
-                            partnerChoices = choices || {};
-                            showMatches();
-                        });
-                    }
-                };
-
-                const listenerId = firebaseManager.addListener(partnerFinishedRef, 'value', checkPartnerFinishedCallback);
-                sessionManager.set('partnerFinishedListenerId', listenerId);
-
-                // Add timeout after 5 minutes
-                setTimeout(() => {
-                    if (!matchesShown) {
-                        matchesShown = true;
-                        const listenerId = sessionManager.get('partnerFinishedListenerId');
-                        if (listenerId) {
-                            firebaseManager.removeListener(listenerId);
-                            sessionManager.set('partnerFinishedListenerId', null);
-                        }
-                        alert('Время ожидания партнера истекло. Попробуйте создать новую сессию.');
-                        startOver();
-                    }
-                }, 5 * 60 * 1000); // 5 minutes
-            } else {
-                // Demo mode - simulate partner choices (randomly like 40-60% of movies)
+            if (!database || !sessionId) {
+                // Demo mode - simulate partner choices
                 movies.forEach(movie => {
                     partnerChoices[movie.id] = Math.random() > 0.5;
                 });
                 setTimeout(() => showMatches(), 500);
+                return;
             }
+
+            const finishedKey = isHost ? 'hostFinished' : 'partnerFinished';
+            const partnerChoicesKey = isHost ? 'partnerChoices' : 'hostChoices';
+            const partnerFinishedKey = isHost ? 'partnerFinished' : 'hostFinished';
+
+            showScreen('linkScreen');
+            document.querySelector('.session-info h2').textContent = 'Ожидание партнера...';
+            document.querySelector('.waiting-message p').textContent = 'Ожидание завершения выбора...';
+
+            let matchesShown = false;
+
+            const showMatchesOnce = async () => {
+                if (matchesShown) return;
+                matchesShown = true;
+                console.log('[checkMatches] showMatchesOnce triggered');
+
+                // Clean up listeners
+                const finishedListenerId = sessionManager.get('partnerFinishedListenerId');
+                if (finishedListenerId) {
+                    firebaseManager.removeListener(finishedListenerId);
+                    sessionManager.set('partnerFinishedListenerId', null);
+                }
+                const choicesListenerId = sessionManager.get('partnerChoicesWaitListenerId');
+                if (choicesListenerId) {
+                    firebaseManager.removeListener(choicesListenerId);
+                    sessionManager.set('partnerChoicesWaitListenerId', null);
+                }
+
+                // Load partner choices
+                const choices = await firebaseManager.read(`sessions/${sessionId}/${partnerChoicesKey}`);
+                partnerChoices = choices || {};
+                console.log('[checkMatches] Partner choices loaded:', Object.keys(partnerChoices).length);
+
+                showMatches();
+            };
+
+            // IMPORTANT: Set up listener BEFORE writing our finished flag
+            // This prevents race condition where partner finishes between our write and listener setup
+            const partnerFinishedRef = database.ref(`sessions/${sessionId}/${partnerFinishedKey}`);
+            const checkPartnerFinishedCallback = (snapshot) => {
+                const partnerFinished = snapshot.val();
+                console.log('[checkMatches] Partner finished status:', partnerFinished);
+                if (partnerFinished === true) {
+                    showMatchesOnce();
+                }
+            };
+
+            const listenerId = firebaseManager.addListener(partnerFinishedRef, 'value', checkPartnerFinishedCallback);
+            sessionManager.set('partnerFinishedListenerId', listenerId);
+            console.log('[checkMatches] Listener set up for partnerFinished');
+
+            // NOW mark ourselves as finished
+            await firebaseManager.write(`sessions/${sessionId}/${finishedKey}`, true);
+            console.log('[checkMatches] Marked as finished in Firebase');
+
+            // Also check partner choices count as backup
+            const partnerChoicesRef = database.ref(`sessions/${sessionId}/${partnerChoicesKey}`);
+            const partnerChoicesListenerId = firebaseManager.addListener(partnerChoicesRef, 'value', (snapshot) => {
+                const choices = snapshot.val() || {};
+                const choicesCount = Object.keys(choices).length;
+                console.log('[checkMatches] Partner choices count:', choicesCount, '/', movies.length);
+                if (choicesCount >= movies.length) {
+                    showMatchesOnce();
+                }
+            });
+            sessionManager.set('partnerChoicesWaitListenerId', partnerChoicesListenerId);
+
+            // Add timeout after 5 minutes
+            setTimeout(() => {
+                if (!matchesShown) {
+                    matchesShown = true;
+                    // Clean up listeners
+                    const finishedListenerId = sessionManager.get('partnerFinishedListenerId');
+                    if (finishedListenerId) {
+                        firebaseManager.removeListener(finishedListenerId);
+                        sessionManager.set('partnerFinishedListenerId', null);
+                    }
+                    const choicesListenerId = sessionManager.get('partnerChoicesWaitListenerId');
+                    if (choicesListenerId) {
+                        firebaseManager.removeListener(choicesListenerId);
+                        sessionManager.set('partnerChoicesWaitListenerId', null);
+                    }
+                    alert('Время ожидания партнера истекло. Попробуйте создать новую сессию.');
+                    startOver();
+                }
+            }, 5 * 60 * 1000); // 5 minutes
         }
 
         function showMatches() {
@@ -3187,9 +3464,21 @@
             const bothSelectedSame = selectedMovieId && selectedMovieId === partnerSelectedMovieId;
 
             matchesGrid.innerHTML = matchedMovies.map(movie => {
+                // Content type badge for results
+                const contentType = movie.type || 'movie';
+                const typeBadgeSmall = contentType === 'series'
+                    ? `<span class="type-badge-small series">📺</span>`
+                    : `<span class="type-badge-small movie">🎬</span>`;
+
                 const posterContent = movie.poster.startsWith('http')
-                    ? `<img src="${escapeHtml(movie.poster)}" class="match-poster" alt="${escapeHtml(movie.title)}">`
-                    : `<div class="match-poster" style="display: flex; align-items: center; justify-content: center; font-size: 40px;">${movie.poster}</div>`;
+                    ? `<div class="match-poster-wrapper">
+                        <img src="${escapeHtml(movie.poster)}" class="match-poster" alt="${escapeHtml(movie.title)}">
+                        ${typeBadgeSmall}
+                       </div>`
+                    : `<div class="match-poster-wrapper">
+                        <div class="match-poster" style="display: flex; align-items: center; justify-content: center; font-size: 40px;">${movie.poster}</div>
+                        ${typeBadgeSmall}
+                       </div>`;
 
                 const isSelectedByYou = selectedMovieId === movie.id;
                 const isSelectedByPartner = partnerSelectedMovieId === movie.id;
@@ -3370,8 +3659,17 @@
             cleanupAllListeners();
 
             showScreen('finalScreen');
+
+            // Content type info
+            const contentType = movie.type || 'movie';
+            const typeLabel = contentType === 'series' ? '📺 Сериал' : '🎬 Фильм';
+            const typeBadgeClass = contentType === 'series' ? 'series' : 'movie';
+
             const posterContent = movie.poster.startsWith('http')
-                ? `<img src="${escapeHtml(movie.poster)}" class="final-poster" alt="${escapeHtml(movie.title)}">`
+                ? `<div class="final-poster-wrapper">
+                    <img src="${escapeHtml(movie.poster)}" class="final-poster" alt="${escapeHtml(movie.title)}">
+                    <div class="final-type-badge ${typeBadgeClass}">${typeLabel}</div>
+                   </div>`
                 : `<div style="font-size: 120px; margin-bottom: 20px;">${movie.poster}</div>`;
 
             document.getElementById('finalMovie').innerHTML = `
