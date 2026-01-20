@@ -2637,6 +2637,11 @@
                     minYear = sessionData.minYear || 2000;
                     isHost = false;
 
+                    // IMPORTANT: Set the global sessionId for use in startSwipePhase and checkMatches
+                    // The function parameter shadows the global, so we need to explicitly set it
+                    sessionManager.set('sessionId', sessionId);
+                    console.log('[joinSession] Set global sessionId:', sessionId);
+
                     // Mark partner as joined (use update to avoid overwriting host data)
                     console.log('Setting partner: true in Firebase...');
                     const success = await firebaseManager.update(`sessions/${sessionId}`, { partner: true });
