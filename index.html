@@ -2597,10 +2597,16 @@
             const result = shuffled.slice(0, movieCount);
 
             // If not enough movies after filtering, add random movies to reach movieCount
-            if (result.length < movieCount) {
-                console.log(`Not enough filtered movies (${result.length}), adding random movies to reach ${movieCount}`);
-                const remainingCount = movieCount - result.length;
-                const shuffledAll = embeddedMovies.sort(() => Math.random() - 0.5);
+            const MIN_EMBEDDED = 5;
+            const targetCount = Math.max(movieCount, MIN_EMBEDDED);
+
+            if (result.length < targetCount) {
+                console.log(`Not enough filtered movies (${result.length}), adding random movies to reach ${targetCount}`);
+                const existingIds = new Set(result.map(m => m.id));
+                const remainingCount = targetCount - result.length;
+                const shuffledAll = embeddedMovies
+                    .filter(m => !existingIds.has(m.id)) // Avoid duplicates
+                    .sort(() => Math.random() - 0.5);
                 const additional = shuffledAll.slice(0, remainingCount);
                 result.push(...additional);
             }
@@ -2693,21 +2699,20 @@
                             })
                             .filter(name => name !== null);
 
-                        // Determine languages based on original_language
-                        // Most movies with Russian translation will have original_language metadata
+                        // Determine languages based on original_language and availability
+                        // Since we request with language=ru-RU, all movies have Russian localization
                         const availableLanguages = [];
-                        if (movie.original_language === 'ru') {
-                            availableLanguages.push('rus');
-                        }
-                        // Since we're using language=ru-RU in query, we get Russian-friendly content
-                        // Add both for broader compatibility (can refine based on popularity in region)
-                        if (movie.original_language === 'en' || movie.vote_count > 100) {
+
+                        // ALL movies from TMDB with ru-RU request have Russian subtitles/dubbing available
+                        // This is the whole point of requesting with language=ru-RU
+                        availableLanguages.push('rus');
+
+                        // Add English for movies that are originally in English or very popular
+                        if (movie.original_language === 'en' || movie.vote_count > 50) {
                             availableLanguages.push('eng');
                         }
-                        // Default fallback if no languages detected
-                        if (availableLanguages.length === 0) {
-                            availableLanguages.push('rus', 'eng');
-                        }
+
+                        console.log(`[fetchMovies] Movie "${movie.title}" languages: [${availableLanguages.join(', ')}] (original: ${movie.original_language}, votes: ${movie.vote_count})`);
 
                         return {
                             id: movie.id,
@@ -2752,6 +2757,29 @@
                     const shuffled = languageFilteredMovies.sort(() => Math.random() - 0.5);
                     movies = shuffled.slice(0, movieCount);
                     console.log(`Successfully loaded ${movies.length} real movies from TMDB (shuffled)`);
+
+                    // If we got less than requested, supplement with embedded movies
+                    const MIN_MOVIES = 5; // Minimum movies for a meaningful experience
+                    if (movies.length < movieCount || movies.length < MIN_MOVIES) {
+                        const needed = Math.max(movieCount - movies.length, MIN_MOVIES - movies.length);
+                        if (needed > 0) {
+                            console.log(`[fetchMovies] Got only ${movies.length}/${movieCount} movies from TMDB (min: ${MIN_MOVIES}), supplementing with embedded movies`);
+                            const embeddedMovies = getFilteredEmbeddedMovies();
+                            const existingIds = new Set(movies.map(m => m.id));
+                            const additionalMovies = embeddedMovies.filter(m => !existingIds.has(m.id));
+                            movies = [...movies, ...additionalMovies.slice(0, needed)];
+                            console.log(`[fetchMovies] Supplemented with ${Math.min(needed, additionalMovies.length)} embedded movies, total: ${movies.length}`);
+
+                            if (movies.length < MIN_MOVIES) {
+                                console.warn(`[fetchMovies] Still only ${movies.length} movies, adding more from full embedded database`);
+                                const allEmbedded = embeddedMovies.sort(() => Math.random() - 0.5);
+                                const moreNeeded = MIN_MOVIES - movies.length;
+                                const moreMovies = allEmbedded.filter(m => !existingIds.has(m.id)).slice(0, moreNeeded);
+                                movies = [...movies, ...moreMovies];
+                                console.log(`[fetchMovies] Final movie count: ${movies.length}`);
+                            }
+                        }
+                    }
                 }
             } catch (error) {
                 console.error('Error fetching movies:', error);
