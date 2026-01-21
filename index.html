@@ -2104,10 +2104,27 @@
             }
         }
 
+        // Track if UI has been initialized
+        let uiInitialized = false;
+
         // Initialize UI
         function initializeUI() {
+            // Prevent double initialization
+            if (uiInitialized) {
+                console.log('UI already initialized, skipping...');
+                return;
+            }
+
+            console.log('Initializing UI...');
+
             // Setup genres
             const genreGrid = document.getElementById('genreGrid');
+            if (!genreGrid) {
+                console.error('genreGrid element not found!');
+                return;
+            }
+            // Clear existing buttons to prevent duplicates
+            genreGrid.innerHTML = '';
             genres.forEach(genre => {
                 const btn = document.createElement('button');
                 btn.className = 'genre-btn';
@@ -2118,6 +2135,12 @@
 
             // Setup countries
             const countryGrid = document.getElementById('countryGrid');
+            if (!countryGrid) {
+                console.error('countryGrid element not found!');
+                return;
+            }
+            // Clear existing buttons to prevent duplicates
+            countryGrid.innerHTML = '';
             countries.forEach(country => {
                 const btn = document.createElement('button');
                 btn.className = 'genre-btn';
@@ -2125,6 +2148,8 @@
                 btn.onclick = () => toggleCountry(country.code, btn);
                 countryGrid.appendChild(btn);
             });
+
+            uiInitialized = true;
 
             // Setup movie count slider
             const slider = document.getElementById('movieCountSlider');
@@ -3766,6 +3791,9 @@
                 console.log('Updated URL with restored session:', newUrl);
             }
 
+            // Restore UI state for setup screen (selected genres, countries, sliders)
+            restoreUIState();
+
             // Restore appropriate screen based on state
             if (currentSessionState === SessionState.SWIPING) {
                 console.log('Restoring swipe screen...');
@@ -3785,6 +3813,65 @@
             }
 
             console.log('Session restored successfully');
+        }
+
+        // Restore UI state (selected buttons, sliders) from session data
+        function restoreUIState() {
+            console.log('Restoring UI state...');
+
+            // Restore genre buttons
+            const genreGrid = document.getElementById('genreGrid');
+            if (genreGrid) {
+                const genreBtns = genreGrid.querySelectorAll('.genre-btn');
+                genreBtns.forEach((btn, index) => {
+                    const genre = genres[index];
+                    if (genre && selectedGenres.includes(genre.id)) {
+                        btn.classList.add('selected');
+                    }
+                });
+            }
+
+            // Restore country buttons
+            const countryGrid = document.getElementById('countryGrid');
+            if (countryGrid) {
+                const countryBtns = countryGrid.querySelectorAll('.genre-btn');
+                countryBtns.forEach((btn, index) => {
+                    const country = countries[index];
+                    if (country && selectedCountries.includes(country.code)) {
+                        btn.classList.add('selected');
+                    }
+                });
+            }
+
+            // Restore sliders
+            const movieCountSlider = document.getElementById('movieCountSlider');
+            const movieCountValue = document.getElementById('movieCountValue');
+            if (movieCountSlider && movieCountValue) {
+                movieCountSlider.value = movieCount;
+                movieCountValue.textContent = movieCount;
+            }
+
+            const yearSlider = document.getElementById('yearSlider');
+            const yearValue = document.getElementById('yearValue');
+            if (yearSlider && yearValue) {
+                yearSlider.value = minYear;
+                yearValue.textContent = minYear;
+            }
+
+            const ratingSlider = document.getElementById('ratingSlider');
+            const ratingValue = document.getElementById('ratingValue');
+            if (ratingSlider && ratingValue) {
+                ratingSlider.value = minRating;
+                ratingValue.textContent = `⭐ ${minRating.toFixed(1)}+`;
+            }
+
+            // Restore language checkboxes
+            const langRussian = document.getElementById('langRussian');
+            const langEnglish = document.getElementById('langEnglish');
+            if (langRussian) langRussian.checked = selectedLanguages.includes('rus');
+            if (langEnglish) langEnglish.checked = selectedLanguages.includes('eng');
+
+            console.log('UI state restored');
         }
 
         // Movie modal functions
@@ -3854,7 +3941,10 @@
         // Initialize app
         document.getElementById('createSessionBtn').onclick = createSession;
 
-        // Try to restore session from localStorage first
+        // ALWAYS initialize UI first - this creates genre and country buttons
+        initializeUI();
+
+        // Try to restore session from localStorage
         const storedSession = loadSessionFromStorage();
         const urlParams = new URLSearchParams(window.location.search);
         const sessionParam = urlParams.get('session');
@@ -3863,8 +3953,8 @@
             // Restore session from localStorage
             console.log('Found stored session, restoring...', storedSession.sessionId);
 
-            // Wait for Firebase if needed
-            if (database) {
+            // Wait for Firebase if configured
+            if (firebaseInitPromise) {
                 (async () => {
                     try {
                         await waitForFirebase();
@@ -3872,12 +3962,11 @@
                         // Reconnect to Firebase listeners if in active session
                         if (storedSession.currentState !== SessionState.SETUP) {
                             console.log('Reconnecting Firebase listeners for restored session...');
-                            // The restoreSession function handles screen restoration
                         }
                     } catch (error) {
                         console.error('Error restoring session:', error);
                         clearSessionStorage();
-                        initializeUI();
+                        showScreen('setupScreen');
                     }
                 })();
             } else {
@@ -3904,7 +3993,7 @@
         } else {
             // No stored session and no URL parameter - fresh start
             console.log('Starting fresh session');
-            initializeUI();
+            showScreen('setupScreen');
         }
     </script>
 </body>
