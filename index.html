@@ -2726,7 +2726,8 @@
 
                         const filteredResults = (data.results || []).filter(movie => {
                             const year = movie.release_date ? parseInt(movie.release_date.split('-')[0]) : 0;
-                            return movie.vote_average >= minRating && year >= minYear;
+                            const hasOverview = movie.overview && movie.overview.trim().length > 0;
+                            return movie.vote_average >= minRating && year >= minYear && hasOverview;
                         }).map(movie => ({ ...movie, _type: 'movie' })); // Add type marker
 
                         allContent.push(...filteredResults);
@@ -2756,7 +2757,8 @@
 
                         const filteredResults = (data.results || []).filter(show => {
                             const year = show.first_air_date ? parseInt(show.first_air_date.split('-')[0]) : 0;
-                            return show.vote_average >= minRating && year >= minYear;
+                            const hasOverview = show.overview && show.overview.trim().length > 0;
+                            return show.vote_average >= minRating && year >= minYear && hasOverview;
                         }).map(show => ({ ...show, _type: 'series' })); // Add type marker
 
                         allContent.push(...filteredResults);
@@ -2798,7 +2800,7 @@
                         return {
                             id: item.id,
                             title: title,
-                            overview: item.overview || 'Описание отсутствует',
+                            overview: item.overview || '',
                             poster: item.poster_path ? `${TMDB_IMAGE_BASE}${item.poster_path}` : '🎬',
                             rating: item.vote_average ? item.vote_average.toFixed(1) : 'N/A',
                             year: releaseDate ? releaseDate.split('-')[0] : 'N/A',
@@ -2815,7 +2817,7 @@
                         console.warn('Error processing item:', item.title || item.name, err);
                         return null;
                     }
-                }).filter(item => item !== null);
+                }).filter(item => item !== null && item.overview && item.overview.trim() !== '' && item.overview !== 'Описание отсутствует');
 
                 // Filter by selected languages
                 const languageFilteredContent = processedContent.filter(item => {
