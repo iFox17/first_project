@@ -1553,8 +1553,8 @@
             // Validate minYear
             if (typeof sessionData.minYear !== 'number' ||
                 sessionData.minYear < 1970 ||
-                sessionData.minYear > 2025) {
-                throw new Error('Неверный год (должен быть 1970-2025)');
+                sessionData.minYear > 2030) {
+                throw new Error('Неверный год (должен быть 1970-2030)');
             }
 
             return true;
@@ -2993,15 +2993,17 @@
 
             const posterContent = movie.poster && movie.poster.startsWith('http')
                 ? `<div class="movie-poster">
-                    <img src="${escapeHtml(movie.poster)}" alt="${escapeHtml(movie.title)}" onerror="this.parentElement.innerHTML='<div class=\\'poster-placeholder\\'><span class=\\'poster-emoji\\'>${movie.poster || '🎬'}</span><span class=\\'poster-title\\'>${escapeHtml(movie.title)}</span></div>'">
+                    <img src="${escapeHtml(movie.poster)}" alt="${escapeHtml(movie.title)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    <div class="poster-placeholder" style="display:none;">
+                        <span class="poster-emoji">🎬</span>
+                    </div>
                     ${typeBadge}
                     ${languageBadges}
                     ${movie.rating !== 'N/A' ? `<div class="movie-rating">⭐ ${escapeHtml(movie.rating)}</div>` : ''}
                    </div>`
                 : `<div class="movie-poster">
                     <div class="poster-placeholder">
-                        <span class="poster-emoji">${movie.poster || '🎬'}</span>
-                        <span class="poster-title">${escapeHtml(movie.title)}</span>
+                        <span class="poster-emoji">🎬</span>
                     </div>
                     ${typeBadge}
                     ${languageBadges}
@@ -3344,13 +3346,13 @@
                     ? `<span class="type-badge-small series">📺</span>`
                     : `<span class="type-badge-small movie">🎬</span>`;
 
-                const posterContent = movie.poster.startsWith('http')
+                const posterContent = movie.poster && movie.poster.startsWith('http')
                     ? `<div class="match-poster-wrapper">
-                        <img src="${escapeHtml(movie.poster)}" class="match-poster" alt="${escapeHtml(movie.title)}">
+                        <img src="${escapeHtml(movie.poster)}" class="match-poster" alt="${escapeHtml(movie.title)}" onerror="this.style.display='none';">
                         ${typeBadgeSmall}
                        </div>`
                     : `<div class="match-poster-wrapper">
-                        <div class="match-poster" style="display: flex; align-items: center; justify-content: center; font-size: 40px;">${movie.poster}</div>
+                        <div class="match-poster" style="display: flex; align-items: center; justify-content: center; font-size: 40px;">🎬</div>
                         ${typeBadgeSmall}
                        </div>`;
 
@@ -3539,12 +3541,12 @@
             const typeLabel = contentType === 'series' ? '📺 Сериал' : '🎬 Фильм';
             const typeBadgeClass = contentType === 'series' ? 'series' : 'movie';
 
-            const posterContent = movie.poster.startsWith('http')
+            const posterContent = movie.poster && movie.poster.startsWith('http')
                 ? `<div class="final-poster-wrapper">
-                    <img src="${escapeHtml(movie.poster)}" class="final-poster" alt="${escapeHtml(movie.title)}">
+                    <img src="${escapeHtml(movie.poster)}" class="final-poster" alt="${escapeHtml(movie.title)}" onerror="this.style.display='none';">
                     <div class="final-type-badge ${typeBadgeClass}">${typeLabel}</div>
                    </div>`
-                : `<div style="font-size: 120px; margin-bottom: 20px;">${movie.poster}</div>`;
+                : `<div style="font-size: 120px; margin-bottom: 20px;">🎬</div>`;
 
             document.getElementById('finalMovie').innerHTML = `
                 ${posterContent}
@@ -3890,13 +3892,13 @@
                    </div>`
                 : '';
 
-            const posterContent = movie.poster.startsWith('http')
+            const posterContent = movie.poster && movie.poster.startsWith('http')
                 ? `<div class="modal-poster">
-                    <img src="${escapeHtml(movie.poster)}" alt="${escapeHtml(movie.title)}">
+                    <img src="${escapeHtml(movie.poster)}" alt="${escapeHtml(movie.title)}" onerror="this.style.display='none';">
                     ${languageBadges}
                     ${movie.rating !== 'N/A' ? `<div class="modal-rating">⭐ ${escapeHtml(movie.rating)}</div>` : ''}
                    </div>`
-                : `<div class="modal-poster" style="display: flex; align-items: center; justify-content: center; font-size: 120px;">${movie.poster}</div>`;
+                : `<div class="modal-poster" style="display: flex; align-items: center; justify-content: center; font-size: 120px;">🎬</div>`;
 
             const genresHtml = movie.movieGenres && movie.movieGenres.length > 0
                 ? `<div class="modal-genres">${movie.movieGenres.map(g => `<span class="modal-genre">${escapeHtml(g)}</span>`).join('')}</div>`
@@ -3944,25 +3946,65 @@
         // ALWAYS initialize UI first - this creates genre and country buttons
         initializeUI();
 
-        // Try to restore session from localStorage
+        // Session initialization logic
         const storedSession = loadSessionFromStorage();
         const urlParams = new URLSearchParams(window.location.search);
         const sessionParam = urlParams.get('session');
 
-        if (storedSession && storedSession.sessionId) {
-            // Restore session from localStorage
-            console.log('Found stored session, restoring...', storedSession.sessionId);
+        // PRIORITY: URL session parameter takes precedence over stored session
+        // This ensures that when someone clicks a link, they join THAT session, not their old one
+        if (sessionParam) {
+            // Check if it's a different session than stored one
+            if (storedSession && storedSession.sessionId === sessionParam) {
+                // Same session - restore it
+                console.log('URL session matches stored session, restoring...', sessionParam);
+                if (firebaseInitPromise) {
+                    (async () => {
+                        try {
+                            await waitForFirebase();
+                            restoreSession(storedSession);
+                        } catch (error) {
+                            console.error('Error restoring session:', error);
+                            clearSessionStorage();
+                            showScreen('setupScreen');
+                        }
+                    })();
+                } else {
+                    restoreSession(storedSession);
+                }
+            } else {
+                // Different session or no stored session - join the new one
+                // Clear old session data first
+                if (storedSession) {
+                    console.log('Clearing old session to join new one:', sessionParam);
+                    clearSessionStorage();
+                }
 
-            // Wait for Firebase if configured
+                sessionId = sessionParam;
+                console.log('Joining session from URL:', sessionId);
+
+                (async () => {
+                    try {
+                        console.log('Waiting for Firebase to initialize...');
+                        await waitForFirebase();
+                        console.log('Firebase ready, joining session');
+                        await joinSession(sessionId);
+                    } catch (error) {
+                        console.error('Firebase initialization failed:', error);
+                        alert('Ошибка подключения к Firebase: ' + error.message + '\nПопробуйте обновить страницу.');
+                        window.location.href = window.location.pathname;
+                    }
+                })();
+            }
+        } else if (storedSession && storedSession.sessionId) {
+            // No URL parameter but have stored session - restore it
+            console.log('Restoring stored session:', storedSession.sessionId);
+
             if (firebaseInitPromise) {
                 (async () => {
                     try {
                         await waitForFirebase();
                         restoreSession(storedSession);
-                        // Reconnect to Firebase listeners if in active session
-                        if (storedSession.currentState !== SessionState.SETUP) {
-                            console.log('Reconnecting Firebase listeners for restored session...');
-                        }
                     } catch (error) {
                         console.error('Error restoring session:', error);
                         clearSessionStorage();
@@ -3972,26 +4014,8 @@
             } else {
                 restoreSession(storedSession);
             }
-        } else if (sessionParam) {
-            // No stored session, but URL has session parameter - joining from link
-            sessionId = sessionParam;
-            console.log('Joining session from URL:', sessionId);
-
-            // Wait for Firebase to initialize before joining
-            (async () => {
-                try {
-                    console.log('Waiting for Firebase to initialize...');
-                    await waitForFirebase();
-                    console.log('Firebase ready, joining session');
-                    await joinSession(sessionId);
-                } catch (error) {
-                    console.error('Firebase initialization failed:', error);
-                    alert('Ошибка подключения к Firebase: ' + error.message + '\nПопробуйте обновить страницу.');
-                    window.location.href = window.location.pathname;
-                }
-            })();
         } else {
-            // No stored session and no URL parameter - fresh start
+            // No URL parameter and no stored session - fresh start
             console.log('Starting fresh session');
             showScreen('setupScreen');
         }
