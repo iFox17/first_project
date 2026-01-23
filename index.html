@@ -2394,7 +2394,11 @@
 
             // Fetch movies in background
             try {
+                // Set content type preferences in sessionManager before fetching
+                sessionManager.set('includeMovies', includeMovies);
+                sessionManager.set('includeSeries', includeSeries);
                 console.log('Host: Starting to fetch movies...');
+                console.log('Host: Content preferences - movies:', includeMovies, 'series:', includeSeries);
                 await fetchMovies();
                 console.log('Host: Movies fetched successfully, count:', movies.length);
 
@@ -2507,7 +2511,10 @@
                     // IMPORTANT: Set the global sessionId for use in startSwipePhase and checkMatches
                     // The function parameter shadows the global, so we need to explicitly set it
                     sessionManager.set('sessionId', sessionId);
+                    sessionManager.set('includeMovies', includeMovies);
+                    sessionManager.set('includeSeries', includeSeries);
                     console.log('[joinSession] Set global sessionId:', sessionId);
+                    console.log('[joinSession] Content preferences - movies:', includeMovies, 'series:', includeSeries);
 
                     // Mark partner as joined (use update to avoid overwriting host data)
                     console.log('Setting partner: true in Firebase...');
@@ -2629,6 +2636,10 @@
             console.log('Min year:', minYear);
             console.log('Movie count:', movieCount);
 
+            const shouldIncludeMovies = sessionManager.get('includeMovies');
+            const shouldIncludeSeries = sessionManager.get('includeSeries');
+            console.log('Include movies:', shouldIncludeMovies, 'Include series:', shouldIncludeSeries);
+
             // Get genre names from selected genre IDs
             const selectedGenreNames = selectedGenres.map(genreId => {
                 const genre = genres.find(g => g.id === genreId);
@@ -2638,6 +2649,11 @@
 
             // Filter movies that match user criteria
             const filtered = embeddedMovies.filter(movie => {
+                // Check content type filter
+                const contentType = movie.type || 'movie';
+                if (contentType === 'movie' && !shouldIncludeMovies) return false;
+                if (contentType === 'series' && !shouldIncludeSeries) return false;
+
                 // Check year filter
                 const movieYear = parseInt(movie.year);
                 if (movieYear < minYear) return false;
@@ -2680,9 +2696,12 @@
                 result.push(...additional);
             }
 
-            console.log(`Returning ${result.length} embedded movies`);
-            // Add type field to all embedded movies (they are all movies, not series)
-            return result.map(movie => ({ ...movie, type: 'movie' }));
+            console.log(`Returning ${result.length} embedded items`);
+            const movieCount = result.filter(m => m.type === 'movie').length;
+            const seriesCount = result.filter(m => m.type === 'series').length;
+            console.log(`Embedded content: ${movieCount} movies, ${seriesCount} series`);
+            // Don't override type - keep original type from embedded data
+            return result;
         }
 
         async function fetchMovies(retryCount = 0, maxRetries = 3) {
@@ -3692,8 +3711,14 @@
         }
 
         function startOver() {
-            // Clear session from localStorage before reload
+            // Clear session from localStorage
             clearSessionStorage();
+
+            // Clear URL parameters to prevent rejoining old session
+            const url = window.location.pathname;
+            window.history.replaceState({}, document.title, url);
+
+            // Reload to show setup screen
             location.reload();
         }
 
