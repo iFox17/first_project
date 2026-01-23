@@ -2403,7 +2403,9 @@
                 console.log('Host: Movies fetched successfully, count:', movies.length);
 
                 if (movies.length === 0) {
-                    alert('Не удалось загрузить фильмы. Попробуйте выбрать другие жанры или страны.');
+                    const contentType = includeMovies && includeSeries ? 'контент' :
+                                      includeSeries ? 'сериалы' : 'фильмы';
+                    alert(`Не удалось загрузить ${contentType}. Попробуйте:\n- Выбрать другие жанры\n- Снизить минимальный рейтинг\n- Расширить диапазон годов\n- Добавить другой тип контента (фильмы/сериалы)`);
                     showScreen('setupScreen');
                     return;
                 }
@@ -2681,19 +2683,32 @@
             const shuffled = filtered.sort(() => Math.random() - 0.5);
             const result = shuffled.slice(0, movieCount);
 
-            // If not enough movies after filtering, add random movies to reach movieCount
+            // If not enough content after filtering, add more that match content type preference
             const MIN_EMBEDDED = 5;
             const targetCount = Math.max(movieCount, MIN_EMBEDDED);
 
             if (result.length < targetCount) {
-                console.log(`Not enough filtered movies (${result.length}), adding random movies to reach ${targetCount}`);
+                console.log(`Not enough filtered items (${result.length}), adding more to reach ${targetCount}`);
                 const existingIds = new Set(result.map(m => m.id));
                 const remainingCount = targetCount - result.length;
+
+                // Filter additional items by content type preference
                 const shuffledAll = embeddedMovies
-                    .filter(m => !existingIds.has(m.id)) // Avoid duplicates
+                    .filter(m => {
+                        if (existingIds.has(m.id)) return false; // Avoid duplicates
+                        const contentType = m.type || 'movie';
+                        if (contentType === 'movie' && !shouldIncludeMovies) return false;
+                        if (contentType === 'series' && !shouldIncludeSeries) return false;
+                        return true;
+                    })
                     .sort(() => Math.random() - 0.5);
+
                 const additional = shuffledAll.slice(0, remainingCount);
                 result.push(...additional);
+
+                if (additional.length < remainingCount) {
+                    console.warn(`Could only add ${additional.length} items matching content type preferences`);
+                }
             }
 
             console.log(`Returning ${result.length} embedded items`);
@@ -2710,6 +2725,14 @@
 
             console.log(`fetchMovies() attempt ${retryCount + 1}/${maxRetries + 1} with ${movieCount} items requested`);
             console.log(`[fetchMovies] Fetching: movies=${shouldFetchMovies}, series=${shouldFetchSeries}`);
+
+            // Validate content type selection
+            if (!shouldFetchMovies && !shouldFetchSeries) {
+                console.error('[fetchMovies] No content type selected! Falling back to embedded movies.');
+                movies = getFilteredEmbeddedMovies();
+                console.log('Embedded movies loaded:', movies.length);
+                return;
+            }
 
             // Update loading message with retry info
             if (document.querySelector('.waiting-message p')) {
@@ -2810,10 +2833,19 @@
                     }
                 }
 
-                console.log(`Total content fetched: ${allContent.length}`);
+                console.log(`Total content fetched from TMDB: ${allContent.length}`);
+
+                // If no content from TMDB, use embedded immediately (don't retry)
+                if (allContent.length === 0) {
+                    console.warn('[fetchMovies] No content returned from TMDB API. Using embedded database.');
+                    showToast('Используем встроенную базу фильмов', 'info', 3000);
+                    movies = getFilteredEmbeddedMovies();
+                    console.log(`Loaded ${movies.length} embedded items as fallback`);
+                    return;
+                }
 
                 // Process all content (movies and series)
-                console.log(`Processing content data...`);
+                console.log(`Processing ${allContent.length} content items...`);
 
                 const processedContent = allContent.slice(0, movieCount * 1.5).map(item => {
                     try {
@@ -2868,20 +2900,15 @@
                     return item.languages.some(lang => selectedLanguages.includes(lang));
                 });
 
-                console.log(`Loaded ${languageFilteredContent.length} items after language filtering (from ${processedContent.length})`);
+                console.log(`Loaded ${languageFilteredContent.length} items after all filtering (from ${allContent.length} raw -> ${processedContent.length} with overview -> ${languageFilteredContent.length} with language)`);
 
                 if (languageFilteredContent.length === 0) {
-                    if (retryCount < maxRetries) {
-                        console.warn(`No content found. Retrying... (${retryCount + 1}/${maxRetries})`);
-                        console.log(`[fetchMovies] Retrying... (${retryCount + 1}/${maxRetries})`);
-                        await new Promise(resolve => setTimeout(resolve, 2000));
-                        return await fetchMovies(retryCount + 1, maxRetries);
-                    } else {
-                        console.error('Max retries exceeded. Using embedded movies database as fallback.');
-                        showToast('⚠️ Используем встроенную базу фильмов (TMDB недоступен)', 'warning', 5000);
-                        movies = getFilteredEmbeddedMovies();
-                        console.log(`Loaded ${movies.length} embedded movies as fallback`);
-                    }
+                    // Content was filtered out, not an API error - use embedded immediately
+                    console.warn('[fetchMovies] All content filtered out by criteria. Using embedded database.');
+                    showToast('Не найдено контента по критериям. Используем встроенную базу', 'info', 4000);
+                    movies = getFilteredEmbeddedMovies();
+                    console.log(`Loaded ${movies.length} embedded items as fallback`);
+                    return;
                 } else {
                     // Shuffle the array for randomness
                     const shuffled = languageFilteredContent.sort(() => Math.random() - 0.5);
